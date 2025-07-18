@@ -161,9 +161,9 @@ module recv_mii #(
 							end
 							r_rx_counter	<=	r_rx_counter + 1;
 							if (toggle) begin
-								r_crc_shift[7:4]<=	mii_rx_d;
+								r_crc_shift		<=	{r_crc_shift[31:0], mii_rx_d, 4'h0};
 							end else begin
-								r_crc_shift		<=	{r_crc_shift[31:0], 4'h0, mii_rx_d};
+								r_crc_shift[3:0]<=	mii_rx_d;
 							end
 
 							if (!mii_rx_c) begin
