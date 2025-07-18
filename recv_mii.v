@@ -19,13 +19,13 @@ module recv_mii #(
 	input					clk,
 	input					rst,
 
-	(* mark_debug = "true" *)input	[MII_WIDTH-1:0]		mii_rx_d,
-	(* mark_debug = "true" *)input	[MII_CTLW-1:0]		mii_rx_c,
+	input	[MII_WIDTH-1:0]		mii_rx_d,
+	input	[MII_CTLW-1:0]		mii_rx_c,
 
-	// フロー制御フレーム送信(1:on, 0:off)
+	// PAUSE Frame send(1:on, 0:off)
 	output						hw_wait,
 
-	// 受信側IF(FIFOインタフェース) 
+	// Data IF(FIFO)
 	output						buf_wen,
 	output	[DATA_WIDTH-1:0]	buf_d,
 
@@ -33,7 +33,11 @@ module recv_mii #(
 	output	[47:0]				src_mac,
 	output	[47:0]				dst_mac,
 	input	[47:0]				own_mac,
-	output	[15:0]				ptype
+	output	[15:0]				ptype,
+
+	// SPIN Frame Header
+	output	[7:0]				fport,
+	output	[7:0]				dsize
 );
 
 	// Baseline state
@@ -42,19 +46,25 @@ module recv_mii #(
 				DST			= 2,
 				SRC			= 3,
 				TYPE		= 4,
-				FDATA		= 5,
-				WGAP		= 6,
-				FLOW_RECV	= 7;
+				FPORT		= 5,
+				DSIZE		= 6,
+				FDATA		= 7,
+				WGAP		= 8,
+				FLOW_RECV	= 9;
 
-	(* mark_debug = "true" *)reg		[3:0]		r_rx_state;
+	reg		[3:0]		r_rx_state;
 
-	(* mark_debug = "true" *)reg		[47:0]		r_rd_src_mac, r_rd_dst_mac;
-	(* mark_debug = "true" *)reg		[15:0]		r_ptype;
-	(* mark_debug = "true" *)reg		[13:0]		r_rx_counter;
+	reg		[47:0]		r_rd_src_mac, r_rd_dst_mac;
+	reg		[15:0]		r_ptype;
 
-	(* mark_debug = "true" *)reg					receiving;
+	reg		[7:0]		r_fport;
+	reg		[7:0]		r_dsize;
 
-	(* mark_debug = "true" *)reg	[15:0]	r_flowtime, r_flowtime_buf;
+	reg		[13:0]		r_rx_counter;
+
+	reg					receiving;
+
+	reg		[15:0]		r_flowtime, r_flowtime_buf;
 
 	assign	src_mac	=	r_rd_src_mac;
 	assign	dst_mac	=	r_rd_dst_mac;
@@ -62,7 +72,7 @@ module recv_mii #(
 
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
-			reg toggle;
+			reg				toggle;
 			reg				rx_valid;
 			reg	[31+8:0]	r_crc_shift;
 
@@ -145,10 +155,22 @@ module recv_mii #(
 								if ({r_ptype[15:8], mii_rx_d, r_ptype[3:0]} == 16'h88_08) begin
 									r_rx_state		<=	FLOW_RECV;
 								end else begin
-									r_rx_state		<=	FDATA;
+									r_rx_state		<=	FPORT;
 								end
 							end else begin
 								r_rx_counter	<=	r_rx_counter + 1;
+							end
+						end
+						FPORT: begin
+							r_fport[(4*toggle)+:4]		<=	mii_rx_d;
+							if (toggle) begin
+								r_rx_state		<=	DSIZE;
+							end
+						end
+						DSIZE: begin
+							r_dsize[(4*toggle)+:4]		<=	mii_rx_d;
+							if (toggle) begin
+								r_rx_state		<=	FDATA;
 							end
 						end
 						FDATA: begin
@@ -161,9 +183,9 @@ module recv_mii #(
 							end
 							r_rx_counter	<=	r_rx_counter + 1;
 							if (toggle) begin
-								r_crc_shift[7:4]<=	mii_rx_d;
+								r_crc_shift		<=	{r_crc_shift[31:0], mii_rx_d, 4'h0};
 							end else begin
-								r_crc_shift		<=	{r_crc_shift[31:0], 4'h0, mii_rx_d};
+								r_crc_shift[3:0]<=	mii_rx_d;
 							end
 
 							if (!mii_rx_c) begin
@@ -324,11 +346,19 @@ module recv_mii #(
 								if ({r_ptype[15:8], mii_rx_d} == 16'h88_08) begin
 									r_rx_state		<=	FLOW_RECV;
 								end else begin
-									r_rx_state		<=	FDATA;
+									r_rx_state		<=	FPORT;
 								end
 							end else begin
 								r_rx_counter	<=	r_rx_counter + 1;
 							end
+						end
+						FPORT: begin
+							r_fport			<=	mii_rx_d;
+							r_rx_state		<=	DSIZE;
+						end
+						DSIZE: begin
+							r_dsize			<=	mii_rx_d;
+							r_rx_state		<=	FDATA;
 						end
 						FDATA: begin
 							r_rx_counter	<=	r_rx_counter + 1;
@@ -469,7 +499,8 @@ module recv_mii #(
 						SRC: begin
 							r_rd_src_mac[31:0]	<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};
 							r_ptype				<=	{xgmii_rxd[39:32],xgmii_rxd[47:40]};
-							// データ書き込み[55:48], [63:56]を準備する
+							r_fport				<=	xgmii_rxd[55:48];
+							r_dsize				<=	xgmii_rxd[63:56];
 
 							if ({xgmii_rxd[39:32],xgmii_rxd[47:40]} == 16'h88_08 && ({xgmii_rxd[55:48], xgmii_rxd[63:56]} == 16'h0001 || {xgmii_rxd[55:48], xgmii_rxd[63:56]} == 16'h0101)) begin
 								r_rx_state		<=	FLOW_RECV;
