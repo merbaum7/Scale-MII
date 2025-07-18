@@ -4,3 +4,7 @@
   
 7/17  
 XGMII[64bit], GMII[8bit], MII(RGMII)[4bit] supported.
+
+
+7/18  
+For SPIN support, fixed sequence send_mii and recv_mii.  
