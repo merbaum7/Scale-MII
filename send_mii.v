@@ -23,10 +23,10 @@ module send_mii #(
 	output	[MII_WIDTH-1:0]		mii_tx_d,
 	output	[MII_CTLW-1:0]		mii_tx_c,
 
-	// フロー制御フレーム送信(1:on, 0:off)
+	// PAUSE Frame send(1:on, 0:off)
 	input						hw_wait,
 
-	// 送信側IF(内部的には小規模のFIFO)
+	// Data IF(FIFO)
 	input						buf_wen,
 	input	[DATA_WIDTH-1:0]	buf_d,
 	output						buf_full,
@@ -34,7 +34,11 @@ module send_mii #(
 	// Frame SRC/DST
 	input	[47:0]				src_mac,
 	input	[47:0]				dst_mac,
-	input	[15:0]				ptype
+	input	[15:0]				ptype,
+
+	// SPIN Frame Header
+	input	[7:0]				fport,
+	input	[7:0]				dsize
 );
 
 	// Baseline state
@@ -46,47 +50,56 @@ module send_mii #(
 
 	localparam	MAX_SIZE	=	(JUMBO)	?	8192+16	:	1504+16;
 
-	wire	[47:0]	inner_dst_mac;
-	wire	[15:0]	inner_ptype;
+	wire	[47:0]				inner_dst_mac;
+	wire	[15:0]				inner_ptype;
+	wire	[7:0]				inner_fport;
+	wire	[7:0]				inner_dsize;
 
 	// state register
-	(* mark_debug = "true" *)reg		[3:0]	r_tx_state;
+	reg		[3:0]				r_tx_state;
 
 	// control register
-	(* mark_debug = "true" *)reg				r_crc_init;
-	(* mark_debug = "true" *)wire			w_crc_en;
-	(* mark_debug = "true" *)wire	[31:0]	w_crc_data;
+	reg							r_crc_init;
+	wire						w_crc_en;
+	wire	[31:0]				w_crc_data;
 	
 	// pause state [0: no_pause, 1: pause_start, 2: pause_end, 3: pause_continue]
-	(* mark_debug = "true" *)reg		[1:0]	r_flow;
+	reg		[1:0]				r_flow;
 
-	(* mark_debug = "true" *)reg		[13:0]	r_tx_counter;
+	reg		[13:0]				r_tx_counter;
 
 	// send data
-	(* mark_debug = "true" *)reg		[DATA_WIDTH-1:0]	r_txd;
-	(* mark_debug = "true" *)reg		[MII_CTLW-1:0]		r_txc;
+	reg		[DATA_WIDTH-1:0]	r_txd;
+	reg		[MII_CTLW-1:0]		r_txc;
 
 	wire	[DATA_WIDTH-1:0]	w_dout;
-	wire					w_dout_en;
-	wire					w_aemp;
+	wire						w_dout_en;
+	wire						w_aemp;
 
-	wire	[DATA_WIDTH-1:0]w_crc_in;
+	wire	[DATA_WIDTH-1:0]	w_crc_in;
 
 	// DST, PTYPE set register
 	generate
 		if (PARAM_REG == 1 || PARAM_REG == "TRUE" || PARAM_REG == "true") begin
 			reg	[47:0]	r_dst_mac;
 			reg	[15:0]	r_ptype;
+			reg	[7:0]	r_fport;
+			reg	[7:0]	r_dsize;
 			always @(posedge clk) begin
 				if (r_tx_state == WAIT && !w_aemp) begin
 					{r_dst_mac, r_ptype}	<=	{dst_mac, ptype};
+					{r_fport, r_dsize}		<=	{fport, dsize};
 				end
 			end
-			assign	inner_dst_mac = r_dst_mac;
-			assign	inner_ptype = r_ptype;
+			assign	inner_dst_mac	=	r_dst_mac;
+			assign	inner_ptype		=	r_ptype;
+			assign	inner_fport		=	r_fport;
+			assign	inner_dsize		=	r_dsize;
 		end else if (PARAM_REG == 0 || PARAM_REG == "FALSE" || PARAM_REG == "false") begin
-			assign	inner_dst_mac = dst_mac;
-			assign	inner_ptype = ptype;
+			assign	inner_dst_mac	=	dst_mac;
+			assign	inner_ptype		=	ptype;
+			assign	inner_fport		=	fport;
+			assign	inner_dsize		=	dsize;
 		end
 	endgenerate
 
@@ -96,10 +109,10 @@ module send_mii #(
 			reg		r_crc_en;
 			reg		r_toggle;
 
-			(* mark_debug = "true" *)reg		[3:0]	r_txd_mii;
+			reg		[3:0]	r_txd_mii;
 			
-			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd_mii;
-			(* mark_debug = "true" *)assign	mii_tx_c	=	r_txc;
+			assign	mii_tx_d	=	r_txd_mii;
+			assign	mii_tx_c	=	r_txc;
 
 			assign	w_dout_en	=	(r_tx_state == FDATA) && !r_toggle;
 			assign	w_crc_in	=	r_txd;
@@ -326,16 +339,16 @@ module send_mii #(
 									end
 								end
 							end
-							14'h0E: begin // (flow: control code)
+							14'h0E: begin // (fpga port | flow: control code)
 								if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{1'b1, 8'h00};
 									r_txd_mii	<=	4'h0;
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_fport};
 									if (r_toggle == 0) begin
-										r_txd_mii	<=	w_dout[3:0];
+										r_txd_mii	<=	inner_fport[3:0];
 									end else begin
-										r_txd_mii	<=	w_dout[7:4];
+										r_txd_mii	<=	inner_fport[7:4];
 									end
 								end
 							end
@@ -348,11 +361,11 @@ module send_mii #(
 										r_txd_mii	<=	4'h0;
 									end
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_dsize[7:0]};
 									if (r_toggle == 0) begin
-										r_txd_mii	<=	w_dout[3:0];
+										r_txd_mii	<=	inner_dsize[3:0];
 									end else begin
-										r_txd_mii	<=	w_dout[7:4];
+										r_txd_mii	<=	inner_dsize[7:4];
 									end
 								end
 							end
@@ -559,18 +572,18 @@ module send_mii #(
 									{r_txc, r_txd}	<=	{1'b1, inner_ptype[7:0]};
 								end
 							end
-							14'h0E: begin // (flow: control code)
+							14'h0E: begin // (fpga port | flow: control code)
 								if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{1'b1, 8'h00};
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_fport};
 								end
 							end
-							14'h0F: begin 
+							14'h0F: begin // (Data size | flow: control code)
 								if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{1'b1, 8'h01};
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_dsize};
 								end
 							end
 							14'h10: begin // (flow: wait time)
@@ -679,7 +692,7 @@ module send_mii #(
 								if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{8'h00, 8'h01, 8'h00, 8'h08, 8'h88, src_mac[7:0], src_mac[15:8], src_mac[23:16], src_mac[31:24]};
 								end else begin
-									{r_txc, r_txd}	<=	{8'h00, w_dout[7:0], w_dout[15:8], inner_ptype[7:0], inner_ptype[15:8], src_mac[7:0], src_mac[15:8], src_mac[23:16], src_mac[31:24]};
+									{r_txc, r_txd}	<=	{8'h00, inner_dsize, inner_fport, inner_ptype[7:0], inner_ptype[15:8], src_mac[7:0], src_mac[15:8], src_mac[23:16], src_mac[31:24]};
 								end
 							end
 							11'h02: begin // TX data write
