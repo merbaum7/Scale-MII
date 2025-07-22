@@ -38,7 +38,8 @@ module send_mii #(
 
 	// SPIN Frame Header
 	input	[7:0]				fport,
-	input	[7:0]				dsize
+	input	[7:0]				dsize,
+	input	[31:0]				daddr
 );
 
 	// Baseline state
@@ -54,6 +55,7 @@ module send_mii #(
 	wire	[15:0]				inner_ptype;
 	wire	[7:0]				inner_fport;
 	wire	[7:0]				inner_dsize;
+	wire	[31:0]				inner_daddr;
 
 	// state register
 	reg		[3:0]				r_tx_state;
@@ -85,21 +87,25 @@ module send_mii #(
 			reg	[15:0]	r_ptype;
 			reg	[7:0]	r_fport;
 			reg	[7:0]	r_dsize;
+			reg	[31:0]	r_daddr;
 			always @(posedge clk) begin
 				if (r_tx_state == WAIT && !w_aemp) begin
 					{r_dst_mac, r_ptype}	<=	{dst_mac, ptype};
 					{r_fport, r_dsize}		<=	{fport, dsize};
+					{r_daddr}				<=	{r_daddr};
 				end
 			end
 			assign	inner_dst_mac	=	r_dst_mac;
 			assign	inner_ptype		=	r_ptype;
 			assign	inner_fport		=	r_fport;
 			assign	inner_dsize		=	r_dsize;
+			assign	inner_daddr		=	r_daddr;
 		end else if (PARAM_REG == 0 || PARAM_REG == "FALSE" || PARAM_REG == "false") begin
 			assign	inner_dst_mac	=	dst_mac;
 			assign	inner_ptype		=	ptype;
 			assign	inner_fport		=	fport;
 			assign	inner_dsize		=	dsize;
+			assign	inner_daddr		=	daddr;
 		end
 	endgenerate
 
@@ -369,7 +375,7 @@ module send_mii #(
 									end
 								end
 							end
-							14'h10: begin // (flow: wait time)
+							14'h10: begin // (daddr | flow: wait time)
 								if (r_flow == 2'b10) begin
 									{r_txc, r_txd}	<=	{1'b1, 8'h00};
 									r_txd_mii		<=	4'h0;
@@ -377,11 +383,11 @@ module send_mii #(
 									{r_txc, r_txd}	<=	{1'b1, 8'hff};
 									r_txd_mii		<=	4'hf;
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[31:24]};
 									if (r_toggle == 0) begin
-										r_txd_mii	<=	w_dout[3:0];
+										r_txd_mii	<=	inner_daddr[27:24];
 									end else begin
-										r_txd_mii	<=	w_dout[7:4];
+										r_txd_mii	<=	inner_daddr[31:28];
 									end
 								end
 							end
@@ -393,13 +399,55 @@ module send_mii #(
 									{r_txc, r_txd}	<=	{1'b1, 8'hff};
 									r_txd_mii		<=	4'hf;
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[23:16]};
 									if (r_toggle == 0) begin
-										r_txd_mii	<=	w_dout[3:0];
+										r_txd_mii	<=	inner_daddr[23:20];
 									end else begin
-										r_txd_mii	<=	w_dout[7:4];
+										r_txd_mii	<=	inner_daddr[19:16];
 									end
 								end
+							end
+							14'h12: begin 
+								if(r_flow != 0) begin
+									{r_txc, r_txd}	<=	{1'b1, 8'h00};
+									r_txd_mii		<=	4'h0;
+								end else begin
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[15:8]};
+									if (r_toggle == 0) begin
+										r_txd_mii	<=	inner_daddr[15:12];
+									end else begin
+										r_txd_mii	<=	inner_daddr[11:8];
+									end
+								end
+							end
+							14'h13: begin 
+								if(r_flow != 0) begin
+									{r_txc, r_txd}	<=	{1'b1, 8'h00};
+									r_txd_mii		<=	4'h0;
+								end else begin
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[7:0]};
+									if (r_toggle == 0) begin
+										r_txd_mii	<=	inner_daddr[7:4];
+									end else begin
+										r_txd_mii	<=	inner_daddr[3:0];
+									end
+								end
+							end
+							14'h14: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								r_txd_mii		<=	4'h0;
+							end
+							14'h15: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								r_txd_mii		<=	4'h0;
+							end
+							14'h16: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								r_txd_mii		<=	4'h0;
+							end
+							14'h17: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								r_txd_mii		<=	4'h0;
 							end
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
@@ -409,7 +457,7 @@ module send_mii #(
 									r_txd_mii	<=	w_dout[7:4];
 								end
 								if (r_tx_counter >= 14'd63 && r_toggle == 1) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= inner_dsize) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -586,13 +634,13 @@ module send_mii #(
 									{r_txc, r_txd}	<=	{1'b1, inner_dsize};
 								end
 							end
-							14'h10: begin // (flow: wait time)
+							14'h10: begin // (daddr | flow: wait time)
 								if (r_flow == 2'b10) begin
 									{r_txc, r_txd}	<=	{1'b1, 8'h00};
 								end else if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{1'b1, 8'hff};
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[31:24]};
 								end
 							end
 							14'h11: begin 
@@ -601,13 +649,39 @@ module send_mii #(
 								end else if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{1'b1, 8'hff};
 								end else begin
-									{r_txc, r_txd}	<=	{1'b1, w_dout[7:0]};
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[23:16]};
 								end
+							end
+							14'h12: begin 
+								if(r_flow != 0) begin
+									{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								end else begin
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[15:8]};
+								end
+							end
+							14'h13: begin 
+								if(r_flow != 0) begin
+									{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								end else begin
+									{r_txc, r_txd}	<=	{1'b1, inner_daddr[7:0]};
+								end
+							end
+							14'h14: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+							end
+							14'h15: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+							end
+							14'h16: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+							end
+							14'h17: begin 
+								{r_txc, r_txd}	<=	{1'b1, 8'h00};
 							end
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
 								if (r_tx_counter >= 14'd63) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= inner_dsize) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -701,13 +775,13 @@ module send_mii #(
 								end else if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'hff, 8'hff};
 								end else begin
-									{r_txc, r_txd}	<=	{8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
+									{r_txc, r_txd}	<=	{8'h00, 8'h00, 8'h00, 8'h00, 8'h00, inner_daddr[7:0], inner_daddr[15:8], inner_daddr[23:16], inner_daddr[31:24]};
 								end
 							end
 							default: begin
 								{r_txc, r_txd}	<= {8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
-								if (r_tx_counter >= 14'd55) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17)) begin
+								if (r_tx_counter >= 14'd40) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= inner_dsize-8) begin
 										r_tx_state	<=	FCS;
 									end
 								end 

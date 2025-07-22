@@ -36,8 +36,11 @@ module recv_mii #(
 	output	[15:0]				ptype,
 
 	// SPIN Frame Header
+	output						head_end,
+	
 	output	[7:0]				fport,
-	output	[7:0]				dsize
+	output	[7:0]				dsize,
+	output	[31:0]				daddr
 );
 
 	// Baseline state
@@ -48,9 +51,10 @@ module recv_mii #(
 				TYPE		= 4,
 				FPORT		= 5,
 				DSIZE		= 6,
-				FDATA		= 7,
-				WGAP		= 8,
-				FLOW_RECV	= 9;
+				DADDR		= 7,
+				FDATA		= 8,
+				WGAP		= 9,
+				FLOW_RECV	= 10;
 
 	reg		[3:0]		r_rx_state;
 
@@ -59,6 +63,7 @@ module recv_mii #(
 
 	reg		[7:0]		r_fport;
 	reg		[7:0]		r_dsize;
+	reg		[31:0]		r_daddr;
 
 	reg		[13:0]		r_rx_counter;
 
@@ -70,14 +75,18 @@ module recv_mii #(
 	assign	dst_mac	=	r_rd_dst_mac;
 	assign	ptype	=	r_ptype;
 
+	assign	fport	=	r_fport;
+	assign	dsize	=	r_dsize;
+	assign	daddr	=	r_daddr;
+
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
 			reg				toggle;
 			reg				rx_valid;
-			reg	[31+8:0]	r_crc_shift;
+			reg	[7:0]		r_rxd;
 
 			assign	buf_wen	=	rx_valid;
-			assign	buf_d	=	r_crc_shift[39:32];
+			assign	buf_d	=	r_rxd;
 
 			always @(posedge clk) begin
 				if (rst) begin
@@ -89,7 +98,11 @@ module recv_mii #(
 					r_rd_dst_mac	<=	0;
 					r_ptype			<=	0;
 
-					r_crc_shift		<=	0;
+					r_fport			<=	0;
+					r_dsize			<=	0;
+					r_daddr			<=	0;
+
+					r_rxd			<=	0;
 
 					rx_valid		<=	1'b0;
 
@@ -107,9 +120,13 @@ module recv_mii #(
 								r_rd_dst_mac	<=	0;
 								r_ptype			<=	0;
 
+								r_fport			<=	0;
+								r_dsize			<=	0;
+								r_daddr			<=	0;
+
 								rx_valid		<=	1'b0;
 
-								r_crc_shift		<=	0;
+								r_rxd			<=	0;
 							end
 						end
 						PREAMBLE: begin
@@ -170,25 +187,36 @@ module recv_mii #(
 						DSIZE: begin
 							r_dsize[(4*toggle)+:4]		<=	mii_rx_d;
 							if (toggle) begin
+								r_rx_state		<=	DADDR;
+							end
+						end
+						DADDR: begin
+							if (r_rx_counter <= 8) begin
+								r_daddr[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
+							end
+							if(r_rx_counter >= 16-1) begin
+								r_rx_counter	<=	0;
 								r_rx_state		<=	FDATA;
+							end else begin
+								r_rx_counter	<=	r_rx_counter + 1;
 							end
 						end
 						FDATA: begin
-							if (r_rx_counter >= 8) begin
-								if (toggle && mii_rx_c) begin
-									rx_valid	<=	1'b1;
-								end else begin
-									rx_valid	<=	1'b0;
-								end
-							end
-							r_rx_counter	<=	r_rx_counter + 1;
-							if (toggle) begin
-								r_crc_shift		<=	{r_crc_shift[31:0], mii_rx_d, 4'h0};
+							if (!toggle && mii_rx_c) begin
+								rx_valid	<=	1'b1;
 							end else begin
-								r_crc_shift[3:0]<=	mii_rx_d;
+								rx_valid	<=	1'b0;
+							end
+							
+							r_rx_counter	<=	r_rx_counter + 1;
+
+							if (toggle) begin
+								r_rxd[7:4]		<=	mii_rx_d;
+							end else begin
+								r_rxd[3:0]		<=	mii_rx_d;
 							end
 
-							if (!mii_rx_c) begin
+							if (!mii_rx_c || r_rx_counter >= r_dsize*2) begin
 								r_rx_state		<=	WGAP;
 							end
 						end
@@ -269,10 +297,10 @@ module recv_mii #(
 			assign	hw_wait	= (r_flowtime != 0);
 		end else if (MII_TYPE == "GMII") begin : GMII_CORE
 			reg				rx_valid;
-			reg	[31+8:0]	r_crc_shift;	
+			reg	[7:0]		r_rxd;	
 
 			assign	buf_wen	=	rx_valid;
-			assign	buf_d	=	r_crc_shift[39:32];
+			assign	buf_d	=	r_rxd;
 
 			always @(posedge clk) begin
 				if (rst) begin
@@ -283,7 +311,11 @@ module recv_mii #(
 					r_rd_dst_mac	<=	0;
 					r_ptype			<=	0;
 
-					r_crc_shift		<=	0;
+					r_fport			<=	0;
+					r_dsize			<=	0;
+					r_daddr			<=	0;
+
+					r_rxd			<=	0;
 
 					rx_valid		<=	1'b0;
 					receiving		<=	0;
@@ -299,9 +331,13 @@ module recv_mii #(
 								r_rd_dst_mac	<=	0;
 								r_ptype			<=	0;
 
+								r_fport			<=	0;
+								r_dsize			<=	0;
+								r_daddr			<=	0;
+
 								rx_valid		<=	1'b0;
 
-								r_crc_shift		<=	0;
+								r_rxd			<=	0;
 							end
 						end
 						PREAMBLE: begin
@@ -358,15 +394,25 @@ module recv_mii #(
 						end
 						DSIZE: begin
 							r_dsize			<=	mii_rx_d;
-							r_rx_state		<=	FDATA;
+							r_rx_state		<=	DADDR;
+						end
+						DADDR: begin
+							if (r_rx_counter <= 4) begin
+								r_daddr[(8*(3-r_rx_counter))+:8]		<=	mii_rx_d;
+							end
+							if(r_rx_counter >= 8-1) begin
+								r_rx_counter	<=	0;
+								r_rx_state		<=	FDATA;
+							end else begin
+								r_rx_counter	<=	r_rx_counter + 1;
+							end
 						end
 						FDATA: begin
 							r_rx_counter	<=	r_rx_counter + 1;
-							if (r_rx_counter >= 5) begin
-								rx_valid		<=	1'b1;
-							end
-							r_crc_shift		<=	{r_crc_shift[31:0], mii_rx_d};
-							if (mii_rx_d == 0 && mii_rx_c == 0) begin
+							rx_valid		<=	1'b1;
+							r_rxd			<=	mii_rx_d;
+							if (mii_rx_d == 0 && mii_rx_c == 0 ||
+								r_rx_counter >= r_dsize) begin
 								r_rx_state		<=	WGAP;
 							end
 						end
@@ -462,6 +508,10 @@ module recv_mii #(
 					r_rd_dst_mac	<=	0;
 					r_ptype			<=	0;
 
+					r_fport			<=	0;
+					r_dsize			<=	0;
+					r_daddr			<=	0;
+
 					rx_valid		<=	1'b0;
 					receiving		<=	0;
 				end else begin
@@ -475,6 +525,10 @@ module recv_mii #(
 								r_rd_src_mac	<=	0; 
 								r_rd_dst_mac	<=	0;
 								r_ptype			<=	0;
+
+								r_fport			<=	0;
+								r_dsize			<=	0;
+								r_daddr			<=	0;
 
 								rx_valid		<=	1'b0;
 							end
@@ -506,13 +560,12 @@ module recv_mii #(
 								r_rx_state		<=	FLOW_RECV;
 								r_rx_counter	<=	0;
 							end else begin
-								r_rx_state		<=	FDATA;
-
-								r_rx_counter	<=	16;
-
-								rx_data			<=	{48'h0, xgmii_rxd[55:48], xgmii_rxd[63:56]};
-								rx_valid		<=	1'b1;
+								r_rx_state		<=	DADDR;
 							end
+						end
+						DADDR: begin
+							r_daddr			<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};
+							r_rx_state		<=	FDATA;
 						end
 						FDATA: begin
 							r_rx_counter	<=	r_rx_counter + 8;
@@ -520,7 +573,7 @@ module recv_mii #(
 							if (r_rx_counter <= 63) begin
 								rx_data		<=	{xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24], xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
 								rx_valid	<=	1'b1;
-							end else if (~|xgmii_rxc) begin
+							end else if (~|xgmii_rxc || r_rx_counter >= r_dsize) begin
 								case (xgmii_rxc)
 									8'b10000000:	rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
 									8'b11000000:	rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, xgmii_rxd[55:48], xgmii_rxd[63:56]};
@@ -528,7 +581,7 @@ module recv_mii #(
 									8'b11110000:	rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0};
 									default: 		rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0};
 								endcase
-								if (xgmii_rxc >= 8'b11110000) begin
+								if (xgmii_rxc >= 8'b11110000 || r_rx_counter >= r_dsize) begin
 									rx_valid		<=	1'b0;
 								end else begin
 									rx_valid		<=	1'b1;
@@ -584,6 +637,6 @@ module recv_mii #(
 
 			assign	hw_wait	= (r_flowtime != 0);
 		end else begin
-			unimplement unimplement(); end // 未実装エラーを引き起こすための一文
+			unimplement unimplement(); end
 	endgenerate
 endmodule
