@@ -58,21 +58,21 @@ module send_mii #(
 	wire	[31:0]				inner_daddr;
 
 	// state register
-	reg		[3:0]				r_tx_state;
+	(* mark_debug = "true" *)reg		[3:0]				r_tx_state;
 
 	// control register
-	reg							r_crc_init;
-	wire						w_crc_en;
-	wire	[31:0]				w_crc_data;
+	(* mark_debug = "true" *)reg							r_crc_init;
+	(* mark_debug = "true" *)wire						w_crc_en;
+	(* mark_debug = "true" *)wire	[31:0]				w_crc_data;
 	
 	// pause state [0: no_pause, 1: pause_start, 2: pause_end, 3: pause_continue]
-	reg		[1:0]				r_flow;
+	(* mark_debug = "true" *)reg		[1:0]				r_flow;
 
-	reg		[13:0]				r_tx_counter;
+	(* mark_debug = "true" *)reg		[13:0]				r_tx_counter;
 
 	// send data
-	reg		[DATA_WIDTH-1:0]	r_txd;
-	reg		[MII_CTLW-1:0]		r_txc;
+	(* mark_debug = "true" *)reg		[DATA_WIDTH-1:0]	r_txd;
+	(* mark_debug = "true" *)reg		[MII_CTLW-1:0]		r_txc;
 
 	wire	[DATA_WIDTH-1:0]	w_dout;
 	wire						w_dout_en;
@@ -112,13 +112,13 @@ module send_mii #(
 	// MII Core
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
-			reg		r_crc_en;
-			reg		r_toggle;
+			(* mark_debug = "true" *)reg		r_crc_en;
+			(* mark_debug = "true" *)reg		r_toggle;
 
-			reg		[3:0]	r_txd_mii;
+			(* mark_debug = "true" *)reg		[3:0]	r_txd_mii;
 			
-			assign	mii_tx_d	=	r_txd_mii;
-			assign	mii_tx_c	=	r_txc;
+			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd_mii;
+			(* mark_debug = "true" *)assign	mii_tx_c	=	r_txc;
 
 			assign	w_dout_en	=	(r_tx_state == FDATA) && !r_toggle;
 			assign	w_crc_in	=	r_txd;
@@ -457,7 +457,7 @@ module send_mii #(
 									r_txd_mii	<=	w_dout[7:4];
 								end
 								if (r_tx_counter >= 14'd63 && r_toggle == 1) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= inner_dsize) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (inner_dsize << 5)-1) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -499,14 +499,14 @@ module send_mii #(
 				end
 			end
 		end else if (MII_TYPE == "GMII") begin : GMII_CORE
-			reg		r_crc_en;
+			(* mark_debug = "true" *)reg		r_crc_en;
 			
-			assign	mii_tx_d	=	r_txd;
-			assign	mii_tx_c	=	r_txc;
+			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd;
+			(* mark_debug = "true" *)assign	mii_tx_c	=	r_txc;
 
 			assign	w_dout_en	=	(r_tx_state == FDATA);
-			assign	w_crc_in	=	r_txd;
-			assign	w_crc_en	=	r_crc_en;
+			(* mark_debug = "true" *)assign	w_crc_in	=	r_txd;
+			(* mark_debug = "true" *)assign	w_crc_en	=	r_crc_en;
 			
 			always @(posedge clk) begin
 				if (rst) begin
@@ -681,7 +681,7 @@ module send_mii #(
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
 								if (r_tx_counter >= 14'd63) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= inner_dsize) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (inner_dsize << 5)-1+24) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -720,8 +720,8 @@ module send_mii #(
 		end else if (MII_TYPE == "XGMII") begin : XGMII_CORE
 			assign	w_crc_en	=	~r_crc_init;
 
-			assign	mii_tx_d	=	r_txd;
-			assign	mii_tx_c	=	r_txc;
+			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd;
+			(* mark_debug = "true" *)assign	mii_tx_c	=	r_txc;
 
 			assign	w_dout_en	=	(r_tx_state == FDATA);
 			assign	w_crc_in	=	r_txd;
@@ -780,8 +780,8 @@ module send_mii #(
 							end
 							default: begin
 								{r_txc, r_txd}	<= {8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
-								if (r_tx_counter >= 14'd40) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= inner_dsize-8) begin
+								if (r_tx_counter >= 14'd64) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= (inner_dsize << 5)-8+24) begin
 										r_tx_state	<=	FCS;
 									end
 								end 
@@ -797,7 +797,7 @@ module send_mii #(
 					end
 					WGAP: begin
 						{r_txc, r_txd}	<= {8'hff, 64'h07_07_07_07_07_07_07_07};
-						if (r_tx_counter >= 5) begin
+						if (r_tx_counter >= 6) begin
 							r_tx_state		<=	WAIT;
 							r_tx_counter	<=	0;
 						end else begin

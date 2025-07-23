@@ -19,15 +19,15 @@ module recv_mii #(
 	input					clk,
 	input					rst,
 
-	input	[MII_WIDTH-1:0]		mii_rx_d,
-	input	[MII_CTLW-1:0]		mii_rx_c,
+	(* mark_debug = "true" *)input	[MII_WIDTH-1:0]		mii_rx_d,
+	(* mark_debug = "true" *)input	[MII_CTLW-1:0]		mii_rx_c,
 
 	// PAUSE Frame send(1:on, 0:off)
 	output						hw_wait,
 
 	// Data IF(FIFO)
-	output						buf_wen,
-	output	[DATA_WIDTH-1:0]	buf_d,
+	(* mark_debug = "true" *)output						buf_wen,
+	(* mark_debug = "true" *)output	[DATA_WIDTH-1:0]	buf_d,
 
 	// Frame SRC/DST
 	output	[47:0]				src_mac,
@@ -56,20 +56,20 @@ module recv_mii #(
 				WGAP		= 9,
 				FLOW_RECV	= 10;
 
-	reg		[3:0]		r_rx_state;
+	(* mark_debug = "true" *)reg		[3:0]		r_rx_state;
 
-	reg		[47:0]		r_rd_src_mac, r_rd_dst_mac;
-	reg		[15:0]		r_ptype;
+	(* mark_debug = "true" *)reg		[47:0]		r_rd_src_mac, r_rd_dst_mac;
+	(* mark_debug = "true" *)reg		[15:0]		r_ptype;
 
-	reg		[7:0]		r_fport;
-	reg		[7:0]		r_dsize;
-	reg		[31:0]		r_daddr;
+	(* mark_debug = "true" *)reg		[7:0]		r_fport;
+	(* mark_debug = "true" *)reg		[7:0]		r_dsize;
+	(* mark_debug = "true" *)reg		[31:0]		r_daddr;
 
-	reg		[13:0]		r_rx_counter;
+	(* mark_debug = "true" *)reg		[13:0]		r_rx_counter;
 
-	reg					receiving;
+	(* mark_debug = "true" *)reg					receiving;
 
-	reg		[15:0]		r_flowtime, r_flowtime_buf;
+	(* mark_debug = "true" *)reg		[15:0]		r_flowtime, r_flowtime_buf;
 
 	assign	src_mac	=	r_rd_src_mac;
 	assign	dst_mac	=	r_rd_dst_mac;
@@ -82,8 +82,8 @@ module recv_mii #(
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
 			reg				toggle;
-			reg				rx_valid;
-			reg	[7:0]		r_rxd;
+			(* mark_debug = "true" *)reg				rx_valid;
+			(* mark_debug = "true" *)reg	[7:0]		r_rxd;
 
 			assign	buf_wen	=	rx_valid;
 			assign	buf_d	=	r_rxd;
@@ -134,7 +134,9 @@ module recv_mii #(
 								toggle			<=	0;
 								r_rx_counter	<=	0;
 								r_rx_state		<=	DST;
-							end else if (mii_rx_d != 4'h5) begin
+							end else if (mii_rx_d == 4'h5) begin
+								r_rx_state		<=	PREAMBLE;
+							end else begin
 								r_rx_state		<=	WGAP;
 							end
 						end
@@ -216,8 +218,9 @@ module recv_mii #(
 								r_rxd[3:0]		<=	mii_rx_d;
 							end
 
-							if (!mii_rx_c || r_rx_counter >= r_dsize*2) begin
+							if (!mii_rx_c || (r_rx_counter >= (r_dsize << 5)*2)) begin
 								r_rx_state		<=	WGAP;
+								rx_valid		<=	1'b0;
 							end
 						end
 						FLOW_RECV: begin
@@ -296,8 +299,8 @@ module recv_mii #(
 
 			assign	hw_wait	= (r_flowtime != 0);
 		end else if (MII_TYPE == "GMII") begin : GMII_CORE
-			reg				rx_valid;
-			reg	[7:0]		r_rxd;	
+			(* mark_debug = "true" *)reg				rx_valid;
+			(* mark_debug = "true" *)reg	[7:0]		r_rxd;	
 
 			assign	buf_wen	=	rx_valid;
 			assign	buf_d	=	r_rxd;
@@ -344,7 +347,9 @@ module recv_mii #(
 							if (mii_rx_d == 8'hD5) begin
 								r_rx_counter	<=	0;
 								r_rx_state		<=	DST;
-							end else if (mii_rx_d != 8'h55) begin
+							end else if (mii_rx_d == 8'h55) begin
+								r_rx_state		<=	PREAMBLE;
+							end else begin
 								r_rx_state		<=	WGAP;
 							end
 						end
@@ -412,8 +417,9 @@ module recv_mii #(
 							rx_valid		<=	1'b1;
 							r_rxd			<=	mii_rx_d;
 							if (mii_rx_d == 0 && mii_rx_c == 0 ||
-								r_rx_counter >= r_dsize) begin
+								r_rx_counter >= (r_dsize << 5)) begin
 								r_rx_state		<=	WGAP;
+								rx_valid		<=	1'b0;
 							end
 						end
 						FLOW_RECV: begin
@@ -484,8 +490,8 @@ module recv_mii #(
 			wire	[63:0]	xgmii_rxd;
 			wire	[7:0]	xgmii_rxc;
 
-			reg				rx_valid;
-			reg	[63:0]		rx_data;	
+			(* mark_debug = "true" *)reg				rx_valid;
+			(* mark_debug = "true" *)reg	[63:0]		rx_data;	
 
 			assign	buf_wen	=	rx_valid;
 			assign	buf_d	=	rx_data;
@@ -566,30 +572,21 @@ module recv_mii #(
 						DADDR: begin
 							r_daddr			<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};
 							r_rx_state		<=	FDATA;
+							r_rx_counter	<=	0;
 						end
 						FDATA: begin
-							r_rx_counter	<=	r_rx_counter + 8;
-
-							if (r_rx_counter <= 63) begin
+							if (r_rx_counter <= 40) begin
 								rx_data		<=	{xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24], xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
+								r_rx_counter	<=	r_rx_counter + 8;
 								rx_valid	<=	1'b1;
-							end else if (~|xgmii_rxc || r_rx_counter >= r_dsize) begin
-								case (xgmii_rxc)
-									8'b10000000:	rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
-									8'b11000000:	rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, xgmii_rxd[55:48], xgmii_rxd[63:56]};
-									8'b11100000:	rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, xgmii_rxd[63:56]};
-									8'b11110000:	rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0};
-									default: 		rx_data		<=	{8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0, 8'h0};
-								endcase
-								if (xgmii_rxc >= 8'b11110000 || r_rx_counter >= r_dsize) begin
-									rx_valid		<=	1'b0;
-								end else begin
-									rx_valid		<=	1'b1;
-								end
+							end else if (r_rx_counter >= (r_dsize << 5)) begin
+								rx_valid		<=	1'b0;
+								r_rx_counter	<=	0;
 								r_rx_state		<=	WGAP;
 								receiving		<=	0;
 							end else begin
 								rx_data		<=	{xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24], xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
+								r_rx_counter	<=	r_rx_counter + 8;
 								rx_valid	<=	1'b1;
 							end
 						end

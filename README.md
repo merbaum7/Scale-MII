@@ -12,3 +12,7 @@ For SPIN support, fixed sequence send_mii and recv_mii.
 
 7/22  
 Add data address header, and fixed each seqence.  
+
+
+7/23  
+Fixed send/recv sequence. Data size is scaled from the header.  
