@@ -581,6 +581,7 @@ module recv_mii #(
 								rx_valid	<=	1'b1;
 							end else if (r_rx_counter >= (r_dsize << 5)) begin
 								rx_valid		<=	1'b0;
+								rx_data			<=	64'h0;
 								r_rx_counter	<=	0;
 								r_rx_state		<=	WGAP;
 								receiving		<=	0;
@@ -600,6 +601,7 @@ module recv_mii #(
 						end
 						WGAP: begin
 							rx_valid		<=	1'b0;
+							rx_data			<=	64'h0;
 							if (receiving) begin
 								if (xgmii_rxc == 8'hFF) begin
 									receiving		<=	0;
