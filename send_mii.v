@@ -4,17 +4,20 @@ module send_mii #(
 	parameter	MII_BUFLEN	=	16,
 	parameter	JUMBO		=	1,
 
-	parameter	MII_WIDTH	=	(MII_TYPE == "XGMII") ? 64
+	parameter	MII_WIDTH	=	(MII_TYPE =="25GMII") ? 64
+							:	(MII_TYPE == "XGMII") ? 64
 							:	(MII_TYPE ==  "GMII") ? 8 
 							:	(MII_TYPE == "RGMII") ? 4
 							:	(MII_TYPE ==   "MII") ? 4
 							:	0,
-	parameter	MII_CTLW	=	(MII_TYPE == "XGMII") ? 8
+	parameter	MII_CTLW	=	(MII_TYPE =="25GMII") ? 8
+							:	(MII_TYPE == "XGMII") ? 8
 							:	(MII_TYPE ==  "GMII") ? 1
 							:	(MII_TYPE == "RGMII") ? 1 
 							:	(MII_TYPE ==   "MII") ? 1
 							:	0,
-	parameter	DATA_WIDTH	=	(MII_TYPE == "XGMII") ? MII_WIDTH
+	parameter	DATA_WIDTH	=	(MII_TYPE =="25GMII") ? MII_WIDTH
+							:	(MII_TYPE == "XGMII") ? MII_WIDTH
 							:	8,
 
 	parameter	PARAM_REG	=	0
@@ -1106,7 +1109,7 @@ module send_mii #(
 					endcase
 				end
 			end
-		end else if (MII_TYPE == "XGMII") begin : XGMII_CORE
+		end else if (MII_TYPE == "XGMII" || MII_TYPE == "25GMII") begin : XGMII_CORE
 			assign	w_crc_en	=	~r_crc_init;
 
 			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd;

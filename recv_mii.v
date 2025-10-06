@@ -5,17 +5,20 @@ module recv_mii #(
 
 	parameter	NMATCH_DENY	=	0,
 
-	parameter	MII_WIDTH	=	(MII_TYPE == "XGMII") ? 64
+	parameter	MII_WIDTH	=	(MII_TYPE =="25GMII") ? 64
+							:	(MII_TYPE == "XGMII") ? 64
 							:	(MII_TYPE ==  "GMII") ? 8 
 							:	(MII_TYPE == "RGMII") ? 4 
 							:	(MII_TYPE ==   "MII") ? 4
 							:	0,
-	parameter	MII_CTLW	=	(MII_TYPE == "XGMII") ? 8
+	parameter	MII_CTLW	=	(MII_TYPE =="25GMII") ? 8
+							:	(MII_TYPE == "XGMII") ? 8
 							:	(MII_TYPE ==  "GMII") ? 1 
 							:	(MII_TYPE == "RGMII") ? 1 
 							:	(MII_TYPE ==   "MII") ? 1
 							:	0,
-	parameter	DATA_WIDTH	=	(MII_TYPE == "XGMII") ? MII_WIDTH
+	parameter	DATA_WIDTH	=	(MII_TYPE =="25GMII") ? MII_WIDTH
+							:	(MII_TYPE == "XGMII") ? MII_WIDTH
 							:	8
 )(
 	input					clk,
@@ -706,7 +709,7 @@ module recv_mii #(
 			end
 
 			assign	hw_wait	= (r_flowtime != 0);
-		end else if (MII_TYPE == "XGMII") begin : XGMII_CORE
+		end else if (MII_TYPE == "XGMII" || MII_TYPE == "25GMII") begin : XGMII_CORE
 			wire	[63:0]	xgmii_rxd;
 			wire	[7:0]	xgmii_rxc;
 
