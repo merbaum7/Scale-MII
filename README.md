@@ -16,3 +16,6 @@ Add data address header, and fixed each seqence.
 
 7/23  
 Fixed send/recv sequence. Data size is scaled from the header.  
+
+10/6  
+RGMII[4bit] supported.  

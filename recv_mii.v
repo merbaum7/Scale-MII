@@ -7,10 +7,12 @@ module recv_mii #(
 
 	parameter	MII_WIDTH	=	(MII_TYPE == "XGMII") ? 64
 							:	(MII_TYPE ==  "GMII") ? 8 
+							:	(MII_TYPE == "RGMII") ? 4 
 							:	(MII_TYPE ==   "MII") ? 4
 							:	0,
 	parameter	MII_CTLW	=	(MII_TYPE == "XGMII") ? 8
 							:	(MII_TYPE ==  "GMII") ? 1 
+							:	(MII_TYPE == "RGMII") ? 1 
 							:	(MII_TYPE ==   "MII") ? 1
 							:	0,
 	parameter	DATA_WIDTH	=	(MII_TYPE == "XGMII") ? MII_WIDTH
@@ -284,6 +286,224 @@ module recv_mii #(
 			end
 
 			always @(posedge clk) begin
+				if (rst) begin
+					r_flowtime	<=	0;
+				end else begin
+					if (r_rx_state == FLOW_RECV && r_rx_counter == 8) begin
+						r_flowtime	<=	r_flowtime_buf;
+					end else begin
+						if (r_flowtime != 0) begin
+							r_flowtime	<=	r_flowtime - 1;
+						end
+					end
+				end
+			end
+
+			assign	hw_wait	= (r_flowtime != 0);
+		end else if (MII_TYPE == "RGMII") begin : MII_CORE
+			reg				toggle;
+			(* mark_debug = "true" *)reg				rx_valid;
+			(* mark_debug = "true" *)reg	[7:0]		r_rxd;
+
+			assign	buf_wen	=	rx_valid;
+			assign	buf_d	=	r_rxd;
+
+			always @(posedge clk or negedge clk) begin
+				if (rst) begin
+					toggle			<=	0;
+					r_rx_counter	<=	0;
+					r_rx_state		<=	WAIT;
+					
+					r_rd_src_mac	<=	0; 
+					r_rd_dst_mac	<=	0;
+					r_ptype			<=	0;
+
+					r_fport			<=	0;
+					r_dsize			<=	0;
+					r_daddr			<=	0;
+
+					r_rxd			<=	0;
+
+					rx_valid		<=	1'b0;
+
+					receiving		<=	0;
+				end else begin
+					toggle			<=	~toggle;
+					case (r_rx_state)
+						WAIT: begin
+							if (mii_rx_c) begin
+								toggle			<=	0;
+								receiving		<=	1;
+								r_rx_state		<=	PREAMBLE;
+
+								r_rd_src_mac	<=	0; 
+								r_rd_dst_mac	<=	0;
+								r_ptype			<=	0;
+
+								r_fport			<=	0;
+								r_dsize			<=	0;
+								r_daddr			<=	0;
+
+								rx_valid		<=	1'b0;
+
+								r_rxd			<=	0;
+							end
+						end
+						PREAMBLE: begin
+							if (mii_rx_d == 4'hD) begin
+								toggle			<=	0;
+								r_rx_counter	<=	0;
+								r_rx_state		<=	DST;
+							end else if (mii_rx_d == 4'h5) begin
+								r_rx_state		<=	PREAMBLE;
+							end else begin
+								r_rx_state		<=	WGAP;
+							end
+						end
+						DST: begin
+							r_rd_dst_mac[(8*(5-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
+							if(r_rx_counter >= 12-1) begin
+								r_rx_counter	<=	0;
+								r_rx_state		<=	SRC;
+							end else begin
+								r_rx_counter	<=	r_rx_counter + 1;
+							end
+						end
+						SRC: begin
+							r_rd_src_mac[(8*(5-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
+							if(r_rx_counter >= 12-1) begin
+								r_rx_counter	<=	0;
+								r_rx_state		<=	TYPE;
+							end else begin
+								if (NMATCH_DENY) begin
+									if (!(r_rd_dst_mac == own_mac ||
+										  r_rd_dst_mac == 48'hFFFFFF_FFFFFF ||			// Broadcast
+										  r_rd_dst_mac == 48'h0180C2_000001 )) begin	// Multicast
+										r_rx_state		<=	WGAP;	
+									end
+									r_rx_counter	<=	r_rx_counter + 1;
+								end else begin
+									r_rx_counter	<=	r_rx_counter + 1;
+								end
+							end
+						end
+						TYPE: begin
+							r_ptype[(8*(1-r_rx_counter[1])+4*toggle)+:4]		<=	mii_rx_d;
+							if(r_rx_counter >= 4-1) begin
+								r_rx_counter	<=	0;
+								if ({r_ptype[15:8], mii_rx_d, r_ptype[3:0]} == 16'h88_08) begin
+									r_rx_state		<=	FLOW_RECV;
+								end else begin
+									r_rx_state		<=	FPORT;
+								end
+							end else begin
+								r_rx_counter	<=	r_rx_counter + 1;
+							end
+						end
+						FPORT: begin
+							r_fport[(4*toggle)+:4]		<=	mii_rx_d;
+							if (toggle) begin
+								r_rx_state		<=	DSIZE;
+							end
+						end
+						DSIZE: begin
+							r_dsize[(4*toggle)+:4]		<=	mii_rx_d;
+							if (toggle) begin
+								r_rx_state		<=	DADDR;
+							end
+						end
+						DADDR: begin
+							if (r_rx_counter <= 8) begin
+								r_daddr[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
+							end
+							if(r_rx_counter >= 16-1) begin
+								r_rx_counter	<=	0;
+								r_rx_state		<=	FDATA;
+							end else begin
+								r_rx_counter	<=	r_rx_counter + 1;
+							end
+						end
+						FDATA: begin
+							if (!toggle && mii_rx_c) begin
+								rx_valid	<=	1'b1;
+							end else begin
+								rx_valid	<=	1'b0;
+							end
+							
+							r_rx_counter	<=	r_rx_counter + 1;
+
+							if (toggle) begin
+								r_rxd[7:4]		<=	mii_rx_d;
+							end else begin
+								r_rxd[3:0]		<=	mii_rx_d;
+							end
+
+							if (!mii_rx_c || (r_rx_counter >= (r_dsize << 5)*2)) begin
+								r_rx_state		<=	WGAP;
+								rx_valid		<=	1'b0;
+							end
+						end
+						FLOW_RECV: begin
+							r_rx_counter	<=	r_rx_counter + 1;
+							if (!mii_rx_c) begin
+								r_rx_state				<=	WGAP;
+							end
+
+							case (r_rx_counter) // PFC Pause frameもとりあえず対応
+								1: begin
+									if (mii_rx_d != 4'h0) begin
+										r_rx_state				<=	WGAP;
+									end
+								end
+								2: begin
+									if (mii_rx_d != 4'h1) begin
+										r_rx_state				<=	WGAP;
+									end
+								end
+								3: begin
+									if (mii_rx_d != 4'h0) begin
+										r_rx_state				<=	WGAP;
+									end
+								end
+								4: begin
+									r_flowtime_buf[11:8]	<=	mii_rx_d;
+								end
+								5: begin
+									r_flowtime_buf[15:12]	<=	mii_rx_d;
+								end
+								6: begin
+									r_flowtime_buf[3:0]		<=	mii_rx_d;
+								end
+								7: begin
+									r_flowtime_buf[7:4]		<=	mii_rx_d;
+								end
+								8: begin
+									r_rx_state				<=	WGAP;
+								end
+								default: r_rx_state		<=	FLOW_RECV;
+							endcase
+						end
+						WGAP: begin
+							rx_valid		<=	1'b0;
+							if (receiving) begin
+								if (!mii_rx_c) begin
+									receiving		<=	0;
+									r_rx_counter	<=	0;
+								end
+							end else begin
+								r_rx_state		<=	WAIT;
+							end
+						end
+						default: begin
+							receiving		<=	0;
+							r_rx_counter	<=	0;
+							r_rx_state		<=	WAIT;
+						end
+					endcase
+				end
+			end
+
+			always @(posedge clk or negedge clk) begin
 				if (rst) begin
 					r_flowtime	<=	0;
 				end else begin
