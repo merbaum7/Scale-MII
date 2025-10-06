@@ -6,4 +6,8 @@
 XGMII[64bit], GMII[8bit], MII(RGMII)[4bit] supported.  
 
 7/18  
-Fixed MII receive sequence of recv_mii for correct crc receiving.
+Fixed MII receive sequence of recv_mii for correct crc receiving.  
+
+10/6  
+RGMII[4bit] supported.  
+
