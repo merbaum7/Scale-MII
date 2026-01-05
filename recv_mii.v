@@ -28,6 +28,8 @@ module recv_mii #(
 	// PAUSE Frame send(1:on, 0:off)
 	output						hw_wait,
 
+	input	[15:0]				read_deny_type,
+
 	// Data IF(FIFO)
 	(* mark_debug = "true" *)output						buf_wen,
 	(* mark_debug = "true" *)output	[DATA_WIDTH-1:0]	buf_d,
@@ -164,9 +166,9 @@ module recv_mii #(
 								r_rx_state		<=	TYPE;
 							end else begin
 								if (NMATCH_DENY) begin
-									if (!(r_rd_dst_mac == own_mac ||
-										  r_rd_dst_mac == 48'hFFFFFF_FFFFFF ||			// Broadcast
-										  r_rd_dst_mac == 48'h0180C2_000001 )) begin	// Multicast
+									if (!((dst_mac == own_mac) ||
+										  (dst_mac == 48'hFFFFFF_FFFFFF) ||			// Broadcast
+										  (dst_mac == 48'h0180C2_000001) )) begin	// Multicast
 										r_rx_state		<=	WGAP;	
 									end
 									r_rx_counter	<=	r_rx_counter + 1;
@@ -239,7 +241,7 @@ module recv_mii #(
 								r_rxd[3:0]		<=	mii_rx_d;
 							end
 
-							if (!mii_rx_c || (r_rx_counter >= (r_dsize << 5)*2)) begin
+							if (!mii_rx_c || (r_dsize == 0 ? r_rx_counter >= 4*2 : r_rx_counter >= (r_dsize << 5)*2) || (read_deny_type == r_ptype)) begin
 								r_rx_state		<=	WGAP;
 								rx_valid		<=	1'b0;
 							end
@@ -392,9 +394,9 @@ module recv_mii #(
 								r_rx_state		<=	TYPE;
 							end else begin
 								if (NMATCH_DENY) begin
-									if (!(r_rd_dst_mac == own_mac ||
-											r_rd_dst_mac == 48'hFFFFFF_FFFFFF ||
-											r_rd_dst_mac == 48'h0180C2_000001 )) begin
+									if (!((dst_mac == own_mac) ||
+										  (dst_mac == 48'hFFFFFF_FFFFFF) ||			// Broadcast
+										  (dst_mac == 48'h0180C2_000001) )) begin	// Multicast
 										r_rx_state		<=	WGAP;	
 									end
 									r_rx_counter	<=	r_rx_counter + 1;
@@ -451,7 +453,8 @@ module recv_mii #(
 							rx_valid		<=	1'b1;
 							r_rxd			<=	mii_rx_d;
 							if (mii_rx_d == 0 && mii_rx_c == 0 ||
-								r_rx_counter >= (r_dsize << 5)) begin
+								(r_dsize == 0 ? r_rx_counter >= 4 : r_rx_counter >= (r_dsize << 5)) ||
+								(read_deny_type == ptype)) begin
 								r_rx_state		<=	WGAP;
 								rx_valid		<=	1'b0;
 							end
@@ -579,9 +582,9 @@ module recv_mii #(
 							r_rd_dst_mac		<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]};
 							r_rd_src_mac[47:32]	<=	{xgmii_rxd[55:48], xgmii_rxd[63:56]};
 							if (NMATCH_DENY) begin
-								if (!({xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == own_mac ||
-										{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'hFFFFFF_FFFFFF ||
-										{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'h0180C2_000001 )) begin
+								if (!(({xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == own_mac) ||
+										({xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'hFFFFFF_FFFFFF) ||
+										({xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'h0180C2_000001 ))) begin
 									r_rx_state		<=	WGAP;	
 								end else begin
 									r_rx_state		<=	SRC;
@@ -612,11 +615,7 @@ module recv_mii #(
 							r_rx_counter	<=	0;
 						end
 						FDATA: begin
-							if (r_rx_counter <= 40) begin
-								rx_data		<=	{xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24], xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
-								r_rx_counter	<=	r_rx_counter + 8;
-								rx_valid	<=	1'b1;
-							end else if (r_rx_counter >= (r_dsize << 5)) begin
+							if ((r_dsize == 0 ? r_rx_counter >= 8 : r_rx_counter >= (r_dsize << 5)) || (read_deny_type == ptype)) begin
 								rx_valid		<=	1'b0;
 								rx_data			<=	64'h0;
 								r_rx_counter	<=	0;

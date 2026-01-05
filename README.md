@@ -35,3 +35,7 @@ Option register/segment added.
 1/4  
 Bugfix for "MII" mode.  
 
+
+1/5  
+Add data reject mode and fix data buffering size term.  
+
