@@ -26,3 +26,12 @@ Add 25GMII[64bit] mode.
 11/5  
 RGMII mode Removed.  
 RGMII should use MII mode. (Assign the this MII module a signal with twice the period of the MII clock signal.)  
+
+
+1/3  
+Option register/segment added.  
+
+
+1/4  
+Bugfix for "MII" mode.  
+

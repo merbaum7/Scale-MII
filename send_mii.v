@@ -59,6 +59,7 @@ module send_mii #(
 	wire	[7:0]				inner_fport;
 	wire	[7:0]				inner_dsize;
 	wire	[31:0]				inner_daddr;
+	wire	[31:0]				inner_option;
 
 	// state register
 	(* mark_debug = "true" *)reg		[3:0]				r_tx_state;
@@ -437,20 +438,44 @@ module send_mii #(
 								end
 							end
 							14'h14: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
-								r_txd_mii		<=	4'h0;
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//r_txd_mii		<=	4'h0;
+								{r_txc, r_txd}	<=	{1'b1, inner_option[31:24]};
+								if (r_toggle == 0) begin
+									r_txd_mii	<=	inner_option[27:24];
+								end else begin
+									r_txd_mii	<=	inner_option[31:28];
+								end
 							end
 							14'h15: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
-								r_txd_mii		<=	4'h0;
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//r_txd_mii		<=	4'h0;
+								{r_txc, r_txd}	<=	{1'b1, inner_option[23:16]};
+								if (r_toggle == 0) begin
+									r_txd_mii	<=	inner_option[23:20];
+								end else begin
+									r_txd_mii	<=	inner_option[19:16];
+								end
 							end
 							14'h16: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
-								r_txd_mii		<=	4'h0;
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//r_txd_mii		<=	4'h0;
+								{r_txc, r_txd}	<=	{1'b1, inner_option[15:8]};
+								if (r_toggle == 0) begin
+									r_txd_mii	<=	inner_option[15:12];
+								end else begin
+									r_txd_mii	<=	inner_option[11:8];
+								end
 							end
 							14'h17: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
-								r_txd_mii		<=	4'h0;
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//r_txd_mii		<=	4'h0;
+								{r_txc, r_txd}	<=	{1'b1, inner_daddr[7:0]};
+								if (r_toggle == 0) begin
+									r_txd_mii	<=	inner_daddr[7:4];
+								end else begin
+									r_txd_mii	<=	inner_daddr[3:0];
+								end
 							end
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
@@ -670,16 +695,20 @@ module send_mii #(
 								end
 							end
 							14'h14: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								{r_txc, r_txd}	<=	{1'b1, inner_option[31:24]};
 							end
 							14'h15: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								{r_txc, r_txd}	<=	{1'b1, inner_option[23:16]};
 							end
 							14'h16: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								{r_txc, r_txd}	<=	{1'b1, inner_option[15:8]};
 							end
 							14'h17: begin 
-								{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
+								{r_txc, r_txd}	<=	{1'b1, inner_option[7:0]};
 							end
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
@@ -778,7 +807,8 @@ module send_mii #(
 								end else if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'hff, 8'hff};
 								end else begin
-									{r_txc, r_txd}	<=	{8'h00, 8'h00, 8'h00, 8'h00, 8'h00, inner_daddr[7:0], inner_daddr[15:8], inner_daddr[23:16], inner_daddr[31:24]};
+									//{r_txc, r_txd}	<=	{8'h00, 8'h00, 8'h00, 8'h00, 8'h00, inner_daddr[7:0], inner_daddr[15:8], inner_daddr[23:16], inner_daddr[31:24]};
+									{r_txc, r_txd}	<=	{inner_option[7:0], inner_option[15:8], inner_option[23:16], inner_option[31:24], inner_daddr[7:0], inner_daddr[15:8], inner_daddr[23:16], inner_daddr[31:24]};
 								end
 							end
 							default: begin

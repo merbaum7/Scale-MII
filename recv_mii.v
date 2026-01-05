@@ -55,9 +55,10 @@ module recv_mii #(
 				FPORT		= 5,
 				DSIZE		= 6,
 				DADDR		= 7,
-				FDATA		= 8,
-				WGAP		= 9,
-				FLOW_RECV	= 10;
+				OPS			= 8,
+				FDATA		= 9,
+				WGAP		= 10,
+				FLOW_RECV	= 11;
 
 	(* mark_debug = "true" *)reg		[3:0]		r_rx_state;
 
@@ -67,6 +68,8 @@ module recv_mii #(
 	(* mark_debug = "true" *)reg		[7:0]		r_fport;
 	(* mark_debug = "true" *)reg		[7:0]		r_dsize;
 	(* mark_debug = "true" *)reg		[31:0]		r_daddr;
+
+	reg								[31:0]		r_ops;
 
 	(* mark_debug = "true" *)reg		[13:0]		r_rx_counter;
 
@@ -104,6 +107,7 @@ module recv_mii #(
 					r_fport			<=	0;
 					r_dsize			<=	0;
 					r_daddr			<=	0;
+					r_ops			<=	0;
 
 					r_rxd			<=	0;
 
@@ -126,6 +130,7 @@ module recv_mii #(
 								r_fport			<=	0;
 								r_dsize			<=	0;
 								r_daddr			<=	0;
+								r_ops			<=	0;
 
 								rx_valid		<=	1'b0;
 
@@ -187,17 +192,30 @@ module recv_mii #(
 							r_fport[(4*toggle)+:4]		<=	mii_rx_d;
 							if (toggle) begin
 								r_rx_state		<=	DSIZE;
+								toggle			<=	0;
 							end
 						end
 						DSIZE: begin
 							r_dsize[(4*toggle)+:4]		<=	mii_rx_d;
 							if (toggle) begin
 								r_rx_state		<=	DADDR;
+								toggle			<=	0;
 							end
 						end
 						DADDR: begin
 							if (r_rx_counter <= 8) begin
 								r_daddr[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
+							end
+							if(r_rx_counter >= 16-1) begin
+								r_rx_counter	<=	0;
+								r_rx_state		<=	OPS;
+							end else begin
+								r_rx_counter	<=	r_rx_counter + 1;
+							end
+						end
+						OPS: begin
+							if (r_rx_counter <= 8) begin
+								r_ops[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
 							end
 							if(r_rx_counter >= 16-1) begin
 								r_rx_counter	<=	0;
@@ -320,6 +338,7 @@ module recv_mii #(
 					r_fport			<=	0;
 					r_dsize			<=	0;
 					r_daddr			<=	0;
+					r_ops			<=	0;
 
 					r_rxd			<=	0;
 
@@ -340,6 +359,7 @@ module recv_mii #(
 								r_fport			<=	0;
 								r_dsize			<=	0;
 								r_daddr			<=	0;
+								r_ops			<=	0;
 
 								rx_valid		<=	1'b0;
 
@@ -373,8 +393,8 @@ module recv_mii #(
 							end else begin
 								if (NMATCH_DENY) begin
 									if (!(r_rd_dst_mac == own_mac ||
-										  r_rd_dst_mac == 48'hFFFFFF_FFFFFF ||
-										  r_rd_dst_mac == 48'h0180C2_000001 )) begin
+											r_rd_dst_mac == 48'hFFFFFF_FFFFFF ||
+											r_rd_dst_mac == 48'h0180C2_000001 )) begin
 										r_rx_state		<=	WGAP;	
 									end
 									r_rx_counter	<=	r_rx_counter + 1;
@@ -407,6 +427,17 @@ module recv_mii #(
 						DADDR: begin
 							if (r_rx_counter <= 4) begin
 								r_daddr[(8*(3-r_rx_counter))+:8]		<=	mii_rx_d;
+							end
+							if(r_rx_counter >= 8-1) begin
+								r_rx_counter	<=	0;
+								r_rx_state		<=	OPS;
+							end else begin
+								r_rx_counter	<=	r_rx_counter + 1;
+							end
+						end
+						OPS: begin
+							if (r_rx_counter <= 4) begin
+								r_ops[(8*(3-r_rx_counter))+:8]		<=	mii_rx_d;
 							end
 							if(r_rx_counter >= 8-1) begin
 								r_rx_counter	<=	0;
@@ -520,6 +551,7 @@ module recv_mii #(
 					r_fport			<=	0;
 					r_dsize			<=	0;
 					r_daddr			<=	0;
+					r_ops			<=	0;
 
 					rx_valid		<=	1'b0;
 					receiving		<=	0;
@@ -538,6 +570,7 @@ module recv_mii #(
 								r_fport			<=	0;
 								r_dsize			<=	0;
 								r_daddr			<=	0;
+								r_ops			<=	0;
 
 								rx_valid		<=	1'b0;
 							end
@@ -547,8 +580,8 @@ module recv_mii #(
 							r_rd_src_mac[47:32]	<=	{xgmii_rxd[55:48], xgmii_rxd[63:56]};
 							if (NMATCH_DENY) begin
 								if (!({xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == own_mac ||
-									  {xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'hFFFFFF_FFFFFF ||
-									  {xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'h0180C2_000001 )) begin
+										{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'hFFFFFF_FFFFFF ||
+										{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24],xgmii_rxd[39:32],xgmii_rxd[47:40]} == 48'h0180C2_000001 )) begin
 									r_rx_state		<=	WGAP;	
 								end else begin
 									r_rx_state		<=	SRC;
@@ -572,8 +605,9 @@ module recv_mii #(
 								r_rx_state		<=	DADDR;
 							end
 						end
-						DADDR: begin
+						DADDR: begin // include option receiving
 							r_daddr			<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};
+							r_ops			<=	{xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
 							r_rx_state		<=	FDATA;
 							r_rx_counter	<=	0;
 						end
