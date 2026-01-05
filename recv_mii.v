@@ -558,13 +558,13 @@ module recv_mii #(
 
 					rx_valid		<=	1'b0;
 					receiving		<=	0;
-					rx_data			<=	64'h0
+					rx_data			<=	64'h0;
 				end else begin
 					case (r_rx_state)
 						WAIT: begin
 							if (xgmii_rxc[0] && xgmii_rxd[7:0] == 8'hfb) begin
 								receiving		<=	1;
-								rx_data			<=	64'h0
+								rx_data			<=	64'h0;
 								r_rx_counter	<=	0;
 								r_rx_state		<=	DST;
 
