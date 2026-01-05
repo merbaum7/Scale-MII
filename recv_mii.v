@@ -208,7 +208,7 @@ module recv_mii #(
 							if (r_rx_counter <= 8) begin
 								r_daddr[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
 							end
-							if(r_rx_counter >= 16-1) begin
+							if(r_rx_counter >= 8-1) begin
 								r_rx_counter	<=	0;
 								r_rx_state		<=	OPS;
 							end else begin
@@ -219,7 +219,7 @@ module recv_mii #(
 							if (r_rx_counter <= 8) begin
 								r_ops[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
 							end
-							if(r_rx_counter >= 16-1) begin
+							if(r_rx_counter >= 8-1) begin
 								r_rx_counter	<=	0;
 								r_rx_state		<=	FDATA;
 							end else begin
@@ -227,18 +227,14 @@ module recv_mii #(
 							end
 						end
 						FDATA: begin
-							if (!toggle && mii_rx_c) begin
-								rx_valid	<=	1'b1;
-							end else begin
-								rx_valid	<=	1'b0;
-							end
-							
 							r_rx_counter	<=	r_rx_counter + 1;
 
 							if (toggle) begin
 								r_rxd[7:4]		<=	mii_rx_d;
+								rx_valid	<=	1'b1;
 							end else begin
 								r_rxd[3:0]		<=	mii_rx_d;
+								rx_valid	<=	1'b0;
 							end
 
 							if (!mii_rx_c || (r_dsize == 0 ? r_rx_counter >= 4*2 : r_rx_counter >= (r_dsize << 5)*2) || (read_deny_type == r_ptype)) begin
@@ -430,7 +426,7 @@ module recv_mii #(
 							if (r_rx_counter <= 4) begin
 								r_daddr[(8*(3-r_rx_counter))+:8]		<=	mii_rx_d;
 							end
-							if(r_rx_counter >= 8-1) begin
+							if(r_rx_counter >= 4-1) begin
 								r_rx_counter	<=	0;
 								r_rx_state		<=	OPS;
 							end else begin
@@ -441,7 +437,7 @@ module recv_mii #(
 							if (r_rx_counter <= 4) begin
 								r_ops[(8*(3-r_rx_counter))+:8]		<=	mii_rx_d;
 							end
-							if(r_rx_counter >= 8-1) begin
+							if(r_rx_counter >= 4-1) begin
 								r_rx_counter	<=	0;
 								r_rx_state		<=	FDATA;
 							end else begin
