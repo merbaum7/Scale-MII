@@ -39,3 +39,7 @@ Bugfix for "MII" mode.
 1/5  
 Add data reject mode and fix data buffering size term.  
 
+
+1/7  
+Fix xgmii receive function case of receive datasize is 32bit.  
+

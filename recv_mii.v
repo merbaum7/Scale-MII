@@ -620,7 +620,11 @@ module recv_mii #(
 								r_rx_state		<=	WGAP;
 								receiving		<=	0;
 							end else begin
-								rx_data		<=	{xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24], xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
+								if (r_dsize == 0) begin
+									rx_data		<=	{32'h0, xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24]};
+								end else begin
+									rx_data		<=	{xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24], xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
+								end
 								r_rx_counter	<=	r_rx_counter + 8;
 								rx_valid	<=	1'b1;
 							end
