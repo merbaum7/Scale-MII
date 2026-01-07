@@ -45,7 +45,9 @@ module recv_mii #(
 	
 	output	[7:0]				fport,
 	output	[7:0]				dsize,
-	output	[31:0]				daddr
+	output	[31:0]				daddr,
+
+	output						recv_done
 );
 
 	// Baseline state
@@ -86,6 +88,18 @@ module recv_mii #(
 	assign	fport	=	r_fport;
 	assign	dsize	=	r_dsize;
 	assign	daddr	=	r_daddr;
+
+	reg	[1:0]	recv_done_reg;
+
+	// Frame receive done signal
+	always @(posedge clk) begin
+		if(rst) begin
+			recv_done_reg	<=	2'b0;
+		end else begin
+			recv_done_reg	<=	{recv_done_reg[0], (r_rx_state == WGAP)};
+		end
+	end
+	assign	recv_done	=	~recv_done_reg[1] & recv_done_reg[0];
 
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
