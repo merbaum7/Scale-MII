@@ -57,8 +57,8 @@ module fifo #(
 		end
 	end
 
-	assign	fifo_full	=	(wr_addr1 == rd_addr) ? 1'b1 : 1'b0;
-	assign	fifo_emp	=	(wr_addr == rd_addr)  ? 1'b1 : 1'b0;
+	assign	fifo_full	=	wr_addr1 == rd_addr;
+	assign	fifo_emp	=	wr_addr == rd_addr;
 
 	assign	full	=	fifo_full;
 	assign	emp		=	fifo_emp;
