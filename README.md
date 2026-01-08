@@ -44,3 +44,6 @@ Add data reject mode and fix data buffering size term.
 Fix xgmii receive function case of receive datasize is 32bit.  
 Add receive done signal.  
 
+
+1/8  
+Fix condition of header received signal.  

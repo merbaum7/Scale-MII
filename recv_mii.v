@@ -109,6 +109,7 @@ module recv_mii #(
 
 			assign	buf_wen	=	rx_valid;
 			assign	buf_d	=	r_rxd;
+			assign	head_end	=	r_rx_state == OPS && r_rx_counter == 8-1;
 
 			always @(posedge clk) begin
 				if (rst) begin
@@ -337,6 +338,7 @@ module recv_mii #(
 
 			assign	buf_wen	=	rx_valid;
 			assign	buf_d	=	r_rxd;
+			assign	head_end	=	r_rx_state == OPS && r_rx_counter == 4-1;
 
 			always @(posedge clk) begin
 				if (rst) begin
@@ -542,6 +544,7 @@ module recv_mii #(
 
 			assign	buf_wen	=	rx_valid;
 			assign	buf_d	=	rx_data;
+			assign	head_end	=	r_rx_state == FDATA && r_rx_counter == 0;
 
 			xgmiisync xgmiisync_0 (
 				.sys_rst(rst),
