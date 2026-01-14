@@ -47,3 +47,7 @@ Add receive done signal.
 
 1/8  
 Fix condition of header received signal.  
+
+
+1/14  
+Increased frame deny condition.  
