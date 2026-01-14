@@ -18,7 +18,7 @@ module fifo #(
 	input					dout_en,
 	output	[BWIDTH-1:0]	dout
 );
-	localparam	ADDR_WIDTH	=	$clog2(DEPTH+1);
+	localparam	ADDR_WIDTH	=	$clog2(DEPTH);
 
 	wire						wr_en;
 	reg		[ADDR_WIDTH-1:0]	wr_addr;
