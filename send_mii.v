@@ -61,22 +61,25 @@ module send_mii #(
 	wire	[31:0]				inner_daddr;
 	wire	[31:0]				inner_option;
 
+	// optional field (reserved)
+	assign	inner_option	=	32'h0000_0000;
+
 	// state register
-	(* mark_debug = "true" *)reg		[3:0]				r_tx_state;
+	reg		[3:0]				r_tx_state;
 
 	// control register
-	(* mark_debug = "true" *)reg							r_crc_init;
-	(* mark_debug = "true" *)wire						w_crc_en;
-	(* mark_debug = "true" *)wire	[31:0]				w_crc_data;
+	reg							r_crc_init;
+	wire						w_crc_en;
+	wire	[31:0]				w_crc_data;
 	
 	// pause state [0: no_pause, 1: pause_start, 2: pause_end, 3: pause_continue]
-	(* mark_debug = "true" *)reg		[1:0]				r_flow;
+	reg		[1:0]				r_flow;
 
-	(* mark_debug = "true" *)reg		[13:0]				r_tx_counter;
+	reg		[13:0]				r_tx_counter;
 
 	// send data
-	(* mark_debug = "true" *)reg		[DATA_WIDTH-1:0]	r_txd;
-	(* mark_debug = "true" *)reg		[MII_CTLW-1:0]		r_txc;
+	reg		[DATA_WIDTH-1:0]	r_txd;
+	reg		[MII_CTLW-1:0]		r_txc;
 
 	wire	[DATA_WIDTH-1:0]	w_dout;
 	wire						w_dout_en;
@@ -96,7 +99,7 @@ module send_mii #(
 				if (r_tx_state == WAIT && !w_aemp) begin
 					{r_dst_mac, r_ptype}	<=	{dst_mac, ptype};
 					{r_fport, r_dsize}		<=	{fport, dsize};
-					{r_daddr}				<=	{r_daddr};
+					{r_daddr}				<=	{daddr};
 				end
 			end
 			assign	inner_dst_mac	=	r_dst_mac;
@@ -116,15 +119,15 @@ module send_mii #(
 	// MII Core
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
-			(* mark_debug = "true" *)reg		r_crc_en;
-			(* mark_debug = "true" *)reg		r_toggle;
+			reg		r_crc_en;
+			reg		r_toggle;
 
-			(* mark_debug = "true" *)reg		[3:0]	r_txd_mii;
+			reg		[3:0]	r_txd_mii;
 			
-			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd_mii;
-			(* mark_debug = "true" *)assign	mii_tx_c	=	r_txc;
+			assign	mii_tx_d	=	r_txd_mii;
+			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA) && !r_toggle;
+			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h18) && !r_toggle;
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
 			
@@ -527,14 +530,14 @@ module send_mii #(
 				end
 			end
 		end else if (MII_TYPE == "GMII") begin : GMII_CORE
-			(* mark_debug = "true" *)reg		r_crc_en;
+			reg		r_crc_en;
 			
-			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd;
-			(* mark_debug = "true" *)assign	mii_tx_c	=	r_txc;
+			assign	mii_tx_d	=	r_txd;
+			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA);
-			(* mark_debug = "true" *)assign	w_crc_in	=	r_txd;
-			(* mark_debug = "true" *)assign	w_crc_en	=	r_crc_en;
+			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h17);
+			assign	w_crc_in	=	r_txd;
+			assign	w_crc_en	=	r_crc_en;
 			
 			always @(posedge clk) begin
 				if (rst) begin
@@ -752,8 +755,8 @@ module send_mii #(
 		end else if (MII_TYPE == "XGMII" || MII_TYPE == "25GMII") begin : XGMII_CORE
 			assign	w_crc_en	=	~r_crc_init;
 
-			(* mark_debug = "true" *)assign	mii_tx_d	=	r_txd;
-			(* mark_debug = "true" *)assign	mii_tx_c	=	r_txc;
+			assign	mii_tx_d	=	r_txd;
+			assign	mii_tx_c	=	r_txc;
 
 			assign	w_dout_en	=	(r_tx_state == FDATA);
 			assign	w_crc_in	=	r_txd;

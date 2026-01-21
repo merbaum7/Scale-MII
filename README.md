@@ -51,3 +51,7 @@ Fix condition of header received signal.
 
 1/14  
 Increased frame deny condition.  
+
+
+1/21  
+Fix buffer read sequence.  
