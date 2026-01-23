@@ -11,7 +11,7 @@ For SPIN support, fixed sequence send_mii and recv_mii.
 
 
 7/22  
-Add data address header, and fixed each seqence.  
+Added data address header, and fixed each seqence.  
 
 
 7/23  
@@ -37,16 +37,16 @@ Bugfix for "MII" mode.
 
 
 1/5  
-Add data reject mode and fix data buffering size term.  
+Added data reject mode and fix data buffering size term.  
 
 
 1/7  
-Fix xgmii receive function case of receive datasize is 32bit.  
+Fixed xgmii receive function case of receive datasize is 32bit.  
 Add receive done signal.  
 
 
 1/8  
-Fix condition of header received signal.  
+Fixed condition of header received signal.  
 
 
 1/14  
@@ -54,4 +54,8 @@ Increased frame deny condition.
 
 
 1/21  
-Fix buffer read sequence.  
+Fixed buffer read sequence.  
+
+
+1/23  
+Added header send end flag and fix send register of mii-mode.  

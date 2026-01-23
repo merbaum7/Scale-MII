@@ -40,9 +40,13 @@ module send_mii #(
 	input	[15:0]				ptype,
 
 	// SPIN Frame Header
+	output						head_end,
+
 	input	[7:0]				fport,
 	input	[7:0]				dsize,
-	input	[31:0]				daddr
+	input	[31:0]				daddr,
+
+	output						send_done
 );
 
 	// Baseline state
@@ -116,6 +120,18 @@ module send_mii #(
 		end
 	endgenerate
 
+	reg	[1:0]	send_done_reg;
+
+	// Frame send done signal
+	always @(posedge clk) begin
+		if(rst) begin
+			send_done_reg	<=	2'b0;
+		end else begin
+			send_done_reg	<=	{send_done_reg[0], (r_tx_state == WGAP)};
+		end
+	end
+	assign	send_done	=	~send_done_reg[1] & send_done_reg[0];
+
 	// MII Core
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
@@ -130,6 +146,8 @@ module send_mii #(
 			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h18) && !r_toggle;
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
+
+			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter == 14'h17) && (r_toggle == 1);
 			
 			always @(posedge clk) begin
 				if (rst) begin
@@ -408,9 +426,9 @@ module send_mii #(
 								end else begin
 									{r_txc, r_txd}	<=	{1'b1, inner_daddr[23:16]};
 									if (r_toggle == 0) begin
-										r_txd_mii	<=	inner_daddr[23:20];
-									end else begin
 										r_txd_mii	<=	inner_daddr[19:16];
+									end else begin
+										r_txd_mii	<=	inner_daddr[23:20];
 									end
 								end
 							end
@@ -421,9 +439,9 @@ module send_mii #(
 								end else begin
 									{r_txc, r_txd}	<=	{1'b1, inner_daddr[15:8]};
 									if (r_toggle == 0) begin
-										r_txd_mii	<=	inner_daddr[15:12];
-									end else begin
 										r_txd_mii	<=	inner_daddr[11:8];
+									end else begin
+										r_txd_mii	<=	inner_daddr[15:12];
 									end
 								end
 							end
@@ -434,9 +452,9 @@ module send_mii #(
 								end else begin
 									{r_txc, r_txd}	<=	{1'b1, inner_daddr[7:0]};
 									if (r_toggle == 0) begin
-										r_txd_mii	<=	inner_daddr[7:4];
-									end else begin
 										r_txd_mii	<=	inner_daddr[3:0];
+									end else begin
+										r_txd_mii	<=	inner_daddr[7:4];
 									end
 								end
 							end
@@ -455,9 +473,9 @@ module send_mii #(
 								//r_txd_mii		<=	4'h0;
 								{r_txc, r_txd}	<=	{1'b1, inner_option[23:16]};
 								if (r_toggle == 0) begin
-									r_txd_mii	<=	inner_option[23:20];
-								end else begin
 									r_txd_mii	<=	inner_option[19:16];
+								end else begin
+									r_txd_mii	<=	inner_option[23:20];
 								end
 							end
 							14'h16: begin 
@@ -465,19 +483,19 @@ module send_mii #(
 								//r_txd_mii		<=	4'h0;
 								{r_txc, r_txd}	<=	{1'b1, inner_option[15:8]};
 								if (r_toggle == 0) begin
-									r_txd_mii	<=	inner_option[15:12];
-								end else begin
 									r_txd_mii	<=	inner_option[11:8];
+								end else begin
+									r_txd_mii	<=	inner_option[15:12];
 								end
 							end
 							14'h17: begin 
 								//{r_txc, r_txd}	<=	{1'b1, 8'h00};
 								//r_txd_mii		<=	4'h0;
-								{r_txc, r_txd}	<=	{1'b1, inner_daddr[7:0]};
+								{r_txc, r_txd}	<=	{1'b1, inner_option[7:0]};
 								if (r_toggle == 0) begin
-									r_txd_mii	<=	inner_daddr[7:4];
+									r_txd_mii	<=	inner_option[3:0];
 								end else begin
-									r_txd_mii	<=	inner_daddr[3:0];
+									r_txd_mii	<=	inner_option[7:4];
 								end
 							end
 							default: begin
@@ -538,6 +556,8 @@ module send_mii #(
 			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h17);
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
+
+			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter == 14'h17);
 			
 			always @(posedge clk) begin
 				if (rst) begin
@@ -758,8 +778,10 @@ module send_mii #(
 			assign	mii_tx_d	=	r_txd;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA);
+			assign	w_dout_en	=	(r_tx_state == FDATA) && (r_tx_counter >= 11'h3);
 			assign	w_crc_in	=	r_txd;
+
+			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter == 11'h2);
 
 			always @(posedge clk) begin
 				if (rst) begin
