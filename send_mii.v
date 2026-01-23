@@ -30,6 +30,7 @@ module send_mii #(
 	input						hw_wait,
 
 	// Data IF(FIFO)
+	input						buf_clk,
 	input						buf_wen,
 	input	[DATA_WIDTH-1:0]	buf_d,
 	output						buf_full,
@@ -88,6 +89,7 @@ module send_mii #(
 	wire	[DATA_WIDTH-1:0]	w_dout;
 	wire						w_dout_en;
 	wire						w_aemp;
+	wire						w_emp;
 
 	wire	[DATA_WIDTH-1:0]	w_crc_in;
 
@@ -131,6 +133,7 @@ module send_mii #(
 		end
 	end
 	assign	send_done	=	~send_done_reg[1] & send_done_reg[0];
+	wire [31:0] sss  = ((inner_dsize << 5)+24)-1;
 
 	// MII Core
 	generate
@@ -505,8 +508,8 @@ module send_mii #(
 								end else begin
 									r_txd_mii	<=	w_dout[7:4];
 								end
-								if (r_tx_counter >= 14'd63 && r_toggle == 1) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (inner_dsize << 5)-1) begin
+								if (r_tx_counter >= 14'd63 && r_toggle == 0) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+24)-1)) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -736,7 +739,7 @@ module send_mii #(
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
 								if (r_tx_counter >= 14'd63) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (inner_dsize << 5)-1) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (((inner_dsize << 5)+23)-1)) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -839,7 +842,7 @@ module send_mii #(
 							default: begin
 								{r_txc, r_txd}	<= {8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
 								if (r_tx_counter >= 14'd64) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= (inner_dsize << 5)-8+24) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= (((inner_dsize << 5)+24)-8)) begin
 										r_tx_state	<=	FCS;
 									end
 								end 
@@ -873,12 +876,13 @@ module send_mii #(
 		.BWIDTH(DATA_WIDTH),
 		.DEPTH(MII_BUFLEN)
 	) tx_buf (
-		.wclk	(clk),
+		.wclk	(buf_clk),
 		.rclk	(clk),
 		.rst	(rst),
 
 		.afull	(buf_full),
 		.aemp	(w_aemp),
+		.emp	(w_emp),
 
 		.din_en	(buf_wen),
 		.din	(buf_d),
