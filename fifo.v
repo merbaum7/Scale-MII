@@ -26,6 +26,7 @@ module fifo #(
 
 	wire						rd_en;
 	reg		[ADDR_WIDTH-1:0]	rd_addr;
+	wire	[ADDR_WIDTH-1:0]	rd_addr1;
 
 	wire						fifo_full;
 	wire						fifo_emp;
@@ -46,6 +47,7 @@ module fifo #(
 		end
 	end
 	assign wr_addr1 = wr_addr + 1;
+	assign rd_addr1 = rd_addr + 1;
 
 	always@(posedge rclk or posedge rst) begin
 		if (rst) begin
@@ -64,7 +66,7 @@ module fifo #(
 	assign	emp		=	fifo_emp;
 
 	assign	afull	=	wr_addr-rd_addr >= {{(ADDR_WIDTH-1){1'b1}},1'b0};
-	assign	aemp	=	wr_addr-rd_addr <= 1;
+	assign	aemp	=	wr_addr == rd_addr1 || fifo_emp;
 
 	assign	dout	=	(emp) ? {BWIDTH{1'b0}} : ram[rd_addr];
 
