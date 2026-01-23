@@ -736,7 +736,7 @@ module send_mii #(
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
 								if (r_tx_counter >= 14'd63) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (inner_dsize << 5)-1+24) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (inner_dsize << 5)-1) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
