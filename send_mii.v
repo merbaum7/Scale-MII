@@ -67,7 +67,7 @@ module send_mii #(
 	wire	[31:0]				inner_option;
 
 	// optional field (reserved)
-	assign	inner_option	=	32'h0000_0000;
+	assign	inner_option	=	32'h12345678;
 
 	// state register
 	reg		[3:0]				r_tx_state;
@@ -150,7 +150,7 @@ module send_mii #(
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
 
-			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter == 14'h17) && (r_toggle == 1);
+			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter == 14'h17) && !r_toggle;
 			
 			always @(posedge clk) begin
 				if (rst) begin
@@ -193,7 +193,12 @@ module send_mii #(
 					end
 					FDATA: begin
 						if (r_toggle == 0) begin
-							r_crc_en		<=	0;
+							if (r_tx_counter >= 14'd63 && (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+24)))) begin
+								r_tx_counter	<=	0;
+								r_crc_en		<=	0;
+							end else begin
+								r_crc_en		<=	0;
+							end
 						end else begin
 							r_crc_en		<=	1;
 							r_tx_counter	<=	r_tx_counter + 1;
@@ -502,16 +507,15 @@ module send_mii #(
 								end
 							end
 							default: begin
-								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
 								if (r_toggle == 0) begin
-									r_txd_mii	<=	w_dout[3:0];
+									{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
+									r_txd_mii	<=	r_txd[3:0];
 								end else begin
-									r_txd_mii	<=	w_dout[7:4];
+									r_txd_mii	<=	r_txd[7:4];
 								end
 								if (r_tx_counter >= 14'd63 && r_toggle == 0) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+24)-1)) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+24))) begin
 										r_tx_state		<=	FCS;
-										r_tx_counter	<=	0;
 									end
 								end 
 							end
@@ -556,7 +560,7 @@ module send_mii #(
 			assign	mii_tx_d	=	r_txd;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h17);
+			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h18);
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
 
@@ -739,7 +743,7 @@ module send_mii #(
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
 								if (r_tx_counter >= 14'd63) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (((inner_dsize << 5)+23)-1)) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (((inner_dsize << 5)+24)-1)) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -781,10 +785,10 @@ module send_mii #(
 			assign	mii_tx_d	=	r_txd;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA) && (r_tx_counter >= 11'h3);
+			assign	w_dout_en	=	(r_tx_state == FDATA) && (r_tx_counter[13:3] >= 11'h3);
 			assign	w_crc_in	=	r_txd;
 
-			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter == 11'h2);
+			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter[13:3] == 11'h3);
 
 			always @(posedge clk) begin
 				if (rst) begin
@@ -840,7 +844,8 @@ module send_mii #(
 								end
 							end
 							default: begin
-								{r_txc, r_txd}	<= {8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
+								//{r_txc, r_txd}	<= {8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
+								{r_txc, r_txd}	<= {8'h00, w_dout};
 								if (r_tx_counter >= 14'd64) begin
 									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= (((inner_dsize << 5)+24)-8)) begin
 										r_tx_state	<=	FCS;

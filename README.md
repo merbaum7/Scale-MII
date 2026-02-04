@@ -59,3 +59,9 @@ Fixed buffer read sequence.
 
 1/23  
 Added header send end flag and fix send register of mii-mode.  
+
+
+2/4  
+Fixed xgmii send data byte alliance.  
+(to fit mii and gmii)  
+
