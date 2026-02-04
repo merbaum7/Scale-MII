@@ -133,7 +133,6 @@ module send_mii #(
 		end
 	end
 	assign	send_done	=	~send_done_reg[1] & send_done_reg[0];
-	wire [31:0] sss  = ((inner_dsize << 5)+24)-1;
 
 	// MII Core
 	generate
@@ -142,11 +141,13 @@ module send_mii #(
 			reg		r_toggle;
 
 			reg		[3:0]	r_txd_mii;
+
+			wire	w_stop_ren = (r_tx_counter == 14'h0) || (r_tx_counter >= ((inner_dsize << 5)+24));
 			
 			assign	mii_tx_d	=	r_txd_mii;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h18) && !r_toggle;
+			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h18 && !w_stop_ren) && !r_toggle;
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
 
