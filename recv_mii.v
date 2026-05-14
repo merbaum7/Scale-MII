@@ -48,6 +48,7 @@ module recv_mii #(
 	output	[7:0]				fport,
 	output	[7:0]				dsize,
 	output	[31:0]				daddr,
+	output	[31:0]				ops,
 
 	output						recv_done
 );
@@ -90,7 +91,7 @@ module recv_mii #(
 	assign	fport	=	r_fport;
 	assign	dsize	=	r_dsize;
 	assign	daddr	=	r_daddr;
-
+	assign	ops		=	r_ops;
 	reg	[1:0]	recv_done_reg;
 
 	// Frame receive done signal
