@@ -67,9 +67,6 @@ module send_mii #(
 	wire	[31:0]				inner_daddr;
 	wire	[31:0]				inner_option;
 
-	// optional field (reserved)
-	assign	inner_option	=	32'h12345678;
-
 	// state register
 	reg		[3:0]				r_tx_state;
 
