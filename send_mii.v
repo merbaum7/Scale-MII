@@ -196,7 +196,7 @@ module send_mii #(
 					end
 					FDATA: begin
 						if (r_toggle == 0) begin
-							if (r_tx_counter >= 14'd63 && (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+24)))) begin
+							if (r_tx_counter >= 14'd63 && (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+32)))) begin
 								r_tx_counter	<=	0;
 								r_crc_en		<=	0;
 							end else begin
@@ -746,7 +746,7 @@ module send_mii #(
 							default: begin
 								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
 								if (r_tx_counter >= 14'd63) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (((inner_dsize << 5)+24)-1)) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= (((inner_dsize << 5)+32)-1)) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -850,7 +850,7 @@ module send_mii #(
 								//{r_txc, r_txd}	<= {8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
 								{r_txc, r_txd}	<= {8'h00, w_dout};
 								if (r_tx_counter >= 14'd64) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= (((inner_dsize << 5)+24)-8)) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= (((inner_dsize << 5)+32)-8)) begin
 										r_tx_state	<=	FCS;
 									end
 								end 
