@@ -144,7 +144,7 @@ module send_mii #(
 
 			reg		[3:0]	r_txd_mii;
 
-			wire	w_stop_ren = (r_tx_counter == 14'h0) || (r_tx_counter >= ((inner_dsize << 5)+24));
+			wire	w_stop_ren = (r_tx_counter == 14'h0) || (r_tx_counter >= ((inner_dsize << 5)+32));
 			
 			assign	mii_tx_d	=	r_txd_mii;
 			assign	mii_tx_c	=	r_txc;
@@ -517,7 +517,7 @@ module send_mii #(
 									r_txd_mii	<=	r_txd[7:4];
 								end
 								if (r_tx_counter >= 14'd63 && r_toggle == 0) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+24))) begin
+									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= (((inner_dsize << 5)+32))) begin
 										r_tx_state		<=	FCS;
 									end
 								end 
