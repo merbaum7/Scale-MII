@@ -46,7 +46,7 @@ module send_mii #(
 	input	[7:0]				fport,
 	input	[7:0]				dsize,
 	input	[31:0]				daddr,
-	input	[31:0]				ops,
+	input	[31:0]				opts,
 
 	output						send_done
 );
@@ -102,13 +102,13 @@ module send_mii #(
 			reg	[7:0]	r_fport;
 			reg	[7:0]	r_dsize;
 			reg	[31:0]	r_daddr;
-			reg	[31:0]	r_ops;
+			reg	[31:0]	r_opts;
 			always @(posedge clk) begin
 				if (r_tx_state == WAIT && !w_aemp) begin
 					{r_dst_mac, r_ptype}	<=	{dst_mac, ptype};
 					{r_fport, r_dsize}		<=	{fport, dsize};
 					{r_daddr}				<=	{daddr};
-					{r_ops}					<=	{ops};
+					{r_opts}				<=	{opts};
 				end
 			end
 			assign	inner_dst_mac	=	r_dst_mac;
@@ -116,14 +116,14 @@ module send_mii #(
 			assign	inner_fport		=	r_fport;
 			assign	inner_dsize		=	r_dsize;
 			assign	inner_daddr		=	r_daddr;
-			assign	inner_option	=	r_ops;
+			assign	inner_option	=	r_opts;
 		end else if (PARAM_REG == 0 || PARAM_REG == "FALSE" || PARAM_REG == "false") begin
 			assign	inner_dst_mac	=	dst_mac;
 			assign	inner_ptype		=	ptype;
 			assign	inner_fport		=	fport;
 			assign	inner_dsize		=	dsize;
 			assign	inner_daddr		=	daddr;
-			assign	inner_option	=	ops;
+			assign	inner_option	=	opts;
 		end
 	endgenerate
 

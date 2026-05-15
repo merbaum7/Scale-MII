@@ -48,7 +48,7 @@ module recv_mii #(
 	output	[7:0]				fport,
 	output	[7:0]				dsize,
 	output	[31:0]				daddr,
-	output	[31:0]				ops,
+	output	[31:0]				opts,
 
 	output						recv_done
 );
@@ -76,7 +76,7 @@ module recv_mii #(
 	(* mark_debug = "true" *)reg		[7:0]		r_dsize;
 	(* mark_debug = "true" *)reg		[31:0]		r_daddr;
 
-	reg								[31:0]		r_ops;
+	reg								[31:0]		r_opts;
 
 	(* mark_debug = "true" *)reg		[13:0]		r_rx_counter;
 
@@ -91,7 +91,7 @@ module recv_mii #(
 	assign	fport	=	r_fport;
 	assign	dsize	=	r_dsize;
 	assign	daddr	=	r_daddr;
-	assign	ops		=	r_ops;
+	assign	opts	=	r_opts;
 	reg	[1:0]	recv_done_reg;
 
 	// Frame receive done signal
@@ -127,7 +127,7 @@ module recv_mii #(
 					r_fport			<=	0;
 					r_dsize			<=	0;
 					r_daddr			<=	0;
-					r_ops			<=	0;
+					r_opts			<=	0;
 
 					r_rxd			<=	0;
 
@@ -150,7 +150,7 @@ module recv_mii #(
 								r_fport			<=	0;
 								r_dsize			<=	0;
 								r_daddr			<=	0;
-								r_ops			<=	0;
+								r_opts			<=	0;
 
 								rx_valid		<=	1'b0;
 
@@ -235,7 +235,7 @@ module recv_mii #(
 						end
 						OPS: begin
 							if (r_rx_counter <= 8) begin
-								r_ops[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
+								r_opts[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
 							end
 							if(r_rx_counter >= 8-1) begin
 								r_rx_counter	<=	0;
@@ -355,7 +355,7 @@ module recv_mii #(
 					r_fport			<=	0;
 					r_dsize			<=	0;
 					r_daddr			<=	0;
-					r_ops			<=	0;
+					r_opts			<=	0;
 
 					r_rxd			<=	0;
 
@@ -376,7 +376,7 @@ module recv_mii #(
 								r_fport			<=	0;
 								r_dsize			<=	0;
 								r_daddr			<=	0;
-								r_ops			<=	0;
+								r_opts			<=	0;
 
 								rx_valid		<=	1'b0;
 
@@ -454,7 +454,7 @@ module recv_mii #(
 						end
 						OPS: begin
 							if (r_rx_counter <= 4) begin
-								r_ops[(8*(3-r_rx_counter))+:8]		<=	mii_rx_d;
+								r_opts[(8*(3-r_rx_counter))+:8]		<=	mii_rx_d;
 							end
 							if(r_rx_counter >= 4-1) begin
 								r_rx_counter	<=	0;
@@ -570,7 +570,7 @@ module recv_mii #(
 					r_fport			<=	0;
 					r_dsize			<=	0;
 					r_daddr			<=	0;
-					r_ops			<=	0;
+					r_opts			<=	0;
 
 					rx_valid		<=	1'b0;
 					receiving		<=	0;
@@ -591,7 +591,7 @@ module recv_mii #(
 								r_fport			<=	0;
 								r_dsize			<=	0;
 								r_daddr			<=	0;
-								r_ops			<=	0;
+								r_opts			<=	0;
 
 								rx_valid		<=	1'b0;
 							end
@@ -628,7 +628,7 @@ module recv_mii #(
 						end
 						DADDR: begin // include option receiving
 							r_daddr			<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};
-							r_ops			<=	{xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
+							r_opts			<=	{xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
 							r_rx_state		<=	FDATA;
 							r_rx_counter	<=	0;
 						end
