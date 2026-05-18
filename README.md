@@ -67,5 +67,5 @@ Fixed xgmii send data byte alliance.
 
 
 2026/5/18  
-Change Lisence.
+Change Lisence.  
 (From MIT Lisence to SHL-2.1)  
