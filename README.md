@@ -69,3 +69,7 @@ Fixed xgmii send data byte alliance.
 2026/5/18  
 Change Lisence.  
 (From MIT Lisence to SHL-2.1)  
+
+
+2026/5/20  
+Added force send mode.  

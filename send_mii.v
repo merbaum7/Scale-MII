@@ -29,6 +29,9 @@ module send_mii #(
 	// PAUSE Frame send(1:on, 0:off)
 	input						hw_wait,
 
+	// Force send
+	input						force_send,
+
 	// Data IF(FIFO)
 	input						buf_clk,
 	input						buf_wen,
@@ -172,7 +175,7 @@ module send_mii #(
 						r_txd_mii			<=	4'h0;
 
 						// (recv flow control) or (flow state) or (exist send data)
-						if ( hw_wait | r_flow != 0 | !w_aemp ) begin
+						if ( hw_wait | r_flow != 0 | !w_aemp | force_send ) begin
 							r_tx_state	<=	PREAMBLE;
 						end
 						r_flow			<=	{r_flow[0],(hw_wait)};
@@ -583,7 +586,7 @@ module send_mii #(
 						{r_txc, r_txd}		<= {1'b0, 8'h00};
 
 						// (recv flow control) or (flow state) or (exist send data)
-						if ( hw_wait | r_flow != 0 | !w_aemp ) begin
+						if ( hw_wait | r_flow != 0 | !w_aemp | force_send ) begin
 							r_tx_state	<=	PREAMBLE;
 						end
 						r_flow			<=	{r_flow[0],(hw_wait)};
@@ -806,7 +809,7 @@ module send_mii #(
 						{r_txc, r_txd}	<= {8'hff, 64'h07_07_07_07_07_07_07_07};
 
 						// (recv flow control) or (flow state) or (exist send data)
-						if ( hw_wait | r_flow != 0 | !w_aemp ) begin
+						if ( hw_wait | r_flow != 0 | !w_aemp | force_send ) begin
 							r_tx_state	<=	PREAMBLE;
 						end
 						r_flow			<=	{r_flow[0],(hw_wait)};
