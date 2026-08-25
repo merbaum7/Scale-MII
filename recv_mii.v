@@ -22,8 +22,8 @@ module recv_mii #(
 	input					clk,
 	input					rst,
 
-	(* mark_debug = "true" *)input	[MII_WIDTH-1:0]		mii_rx_d,
-	(* mark_debug = "true" *)input	[MII_CTLW-1:0]		mii_rx_c,
+	input	[MII_WIDTH-1:0]		mii_rx_d,
+	input	[MII_CTLW-1:0]		mii_rx_c,
 
 	// PAUSE Frame send(1:on, 0:off)
 	output						hw_wait,
@@ -33,8 +33,8 @@ module recv_mii #(
 	input	[15:0]				read_deny_type3,
 
 	// Data IF(FIFO)
-	(* mark_debug = "true" *)output						buf_wen,
-	(* mark_debug = "true" *)output	[DATA_WIDTH-1:0]	buf_d,
+	output						buf_wen,
+	output	[DATA_WIDTH-1:0]	buf_d,
 
 	// Frame SRC/DST
 	output	[47:0]				src_mac,
@@ -66,6 +66,9 @@ module recv_mii #(
 				FDATA		= 9,
 				WGAP		= 10,
 				FLOW_RECV	= 11;
+
+	localparam	DATAREQ		= 16'h0111,
+				DATAFRAME	= 16'h0110;
 
 	reg		[3:0]		r_rx_state;
 
@@ -209,10 +212,14 @@ module recv_mii #(
 							end
 						end
 						FPORT: begin
-							r_fport[(4*toggle)+:4]		<=	mii_rx_d;
-							if (toggle) begin
-								r_rx_state		<=	DSIZE;
-								toggle			<=	0;
+							if (r_ptype != DATAREQ && r_ptype != DATAFRAME) begin
+								r_rx_state		<=	WGAP;
+							end else begin
+								r_fport[(4*toggle)+:4]		<=	mii_rx_d;
+								if (toggle) begin
+									r_rx_state		<=	DSIZE;
+									toggle			<=	0;
+								end
 							end
 						end
 						DSIZE: begin
@@ -434,8 +441,12 @@ module recv_mii #(
 							end
 						end
 						FPORT: begin
-							r_fport			<=	mii_rx_d;
-							r_rx_state		<=	DSIZE;
+							if (r_ptype != DATAREQ && r_ptype != DATAFRAME) begin
+								r_rx_state		<=	WGAP;
+							end else begin
+								r_fport			<=	mii_rx_d;
+								r_rx_state		<=	DSIZE;
+							end
 						end
 						DSIZE: begin
 							r_dsize			<=	mii_rx_d;
@@ -627,10 +638,14 @@ module recv_mii #(
 							end
 						end
 						DADDR: begin // include option receiving
-							r_daddr			<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};
-							r_opts			<=	{xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
-							r_rx_state		<=	FDATA;
-							r_rx_counter	<=	0;
+							if (r_ptype != DATAREQ && r_ptype != DATAFRAME) begin
+								r_rx_state		<=	WGAP;
+							end else begin
+								r_daddr			<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};
+								r_opts			<=	{xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
+								r_rx_state		<=	FDATA;
+								r_rx_counter	<=	0;
+							end
 						end
 						FDATA: begin
 							if ((r_dsize == 0 ? r_rx_counter >= 8 : r_rx_counter >= ((r_dsize+1) << 5)) 
