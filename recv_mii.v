@@ -67,8 +67,8 @@ module recv_mii #(
 				WGAP		= 10,
 				FLOW_RECV	= 11;
 
-	localparam	DATAREQ		= 16'h0111,
-				DATAFRAME	= 16'h0110;
+	localparam	REQ		= 16'h88B5,
+				DATA	= 16'h88B6;
 
 	reg		[3:0]		r_rx_state;
 
@@ -212,7 +212,7 @@ module recv_mii #(
 							end
 						end
 						FPORT: begin
-							if (r_ptype != DATAREQ && r_ptype != DATAFRAME) begin
+							if (r_ptype != REQ && r_ptype != DATA) begin
 								r_rx_state		<=	WGAP;
 							end else begin
 								r_fport[(4*toggle)+:4]		<=	mii_rx_d;
@@ -441,7 +441,7 @@ module recv_mii #(
 							end
 						end
 						FPORT: begin
-							if (r_ptype != DATAREQ && r_ptype != DATAFRAME) begin
+							if (r_ptype != REQ && r_ptype != DATA) begin
 								r_rx_state		<=	WGAP;
 							end else begin
 								r_fport			<=	mii_rx_d;
@@ -638,7 +638,7 @@ module recv_mii #(
 							end
 						end
 						DADDR: begin // include option receiving
-							if (r_ptype != DATAREQ && r_ptype != DATAFRAME) begin
+							if (r_ptype != REQ && r_ptype != DATA) begin
 								r_rx_state		<=	WGAP;
 							end else begin
 								r_daddr			<=	{xgmii_rxd[7:0],xgmii_rxd[15:8],xgmii_rxd[23:16],xgmii_rxd[31:24]};

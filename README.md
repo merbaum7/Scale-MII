@@ -79,4 +79,5 @@ Added force send mode.
 Fixed the definition of data size.  
 (Send/Recv size: size*256byte -> (size+1)*32byte)  
 Fixed droping undefined type frame.  
+Re-define REQUEST, DATA Frame type.  
 
