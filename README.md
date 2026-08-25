@@ -77,5 +77,9 @@ Added force send mode.
 
 2026/6/19  
 Fixed the definition of data size.  
+<<<<<<< HEAD
 (Send/Recv size: size*256byte -> (size+1)*32byte)  
+=======
+(Send/Recv size: size*256byte -> (size+1)*256byte)  
+>>>>>>> fbb2e9f260d8d0b55b48b0b067b7dfde6f56ab38
 
