@@ -104,7 +104,7 @@ module send_mii #(
 			reg	[31:0]	r_daddr;
 			reg	[31:0]	r_opts;
 			always @(posedge clk) begin
-				if (r_tx_state == WAIT && !w_aemp) begin
+				if (r_tx_state == WAIT && (!w_aemp || force_send)) begin
 					{r_dst_mac, r_ptype}	<=	{dst_mac, ptype};
 					{r_fport, r_dsize}		<=	{fport, dsize};
 					{r_daddr}				<=	{daddr};
