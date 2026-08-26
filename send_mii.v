@@ -61,7 +61,7 @@ module send_mii #(
 				FCS			= 3,
 				WGAP		= 4;
 
-	localparam	MAX_SIZE	=	(JUMBO)	?	8192+16	:	1504+16;
+	localparam	MAX_SIZE	=	(JUMBO)	?	8192+32	:	1504+32;
 
 	wire	[47:0]				inner_dst_mac;
 	wire	[15:0]				inner_ptype;
