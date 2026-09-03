@@ -515,7 +515,7 @@ module send_mii #(
 							default: begin
 								if (r_toggle == 0) begin
 									{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
-									r_txd_mii	<=	r_txd[3:0];
+									r_txd_mii	<=	w_dout[3:0];
 								end else begin
 									r_txd_mii	<=	r_txd[7:4];
 								end
