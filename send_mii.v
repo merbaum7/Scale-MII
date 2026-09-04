@@ -18,7 +18,8 @@ module send_mii #(
 							:	(MII_TYPE == "XGMII") ? MII_WIDTH
 							:	8,
 
-	parameter	PARAM_REG	=	0
+	parameter	PARAM_REG	=	0,
+	parameter	BUF_WIDTH	=	32
 )(
 	input						clk,
 	input						rst,
@@ -53,6 +54,16 @@ module send_mii #(
 
 	output						send_done
 );
+
+	localparam integer FIFO_WORD_BYTES		= DATA_WIDTH / 8;
+	localparam integer BUF_WORD_BYTES		= BUF_WIDTH / 8;
+
+	// padding bytes parameter for size=0 frame
+	localparam integer SIZE0_PAYLOAD_WORDS	= (4 + FIFO_WORD_BYTES - 1) / FIFO_WORD_BYTES;
+	localparam integer SIZE0_TOTAL_WORDS	= BUF_WIDTH / DATA_WIDTH;
+	localparam integer SIZE0_EXTRA_WORDS	= SIZE0_TOTAL_WORDS - SIZE0_PAYLOAD_WORDS;
+	localparam integer SIZE0_DRAIN_BEGIN	= 24 + SIZE0_PAYLOAD_WORDS * FIFO_WORD_BYTES;
+	localparam integer SIZE0_DRAIN_END		= SIZE0_DRAIN_BEGIN + SIZE0_EXTRA_WORDS * FIFO_WORD_BYTES;
 
 	// Baseline state
 	localparam	WAIT		= 0,
@@ -92,7 +103,11 @@ module send_mii #(
 	wire						w_aemp;
 	wire						w_emp;
 
+	wire						w_start_ready	=	(MII_TYPE == "XGMII" || MII_TYPE == "25GMII") ? !w_emp : !w_aemp;
+
 	wire	[DATA_WIDTH-1:0]	w_crc_in;
+
+	wire						w_size0_drain_active = (inner_dsize == 8'd0) && (SIZE0_EXTRA_WORDS != 0) && (r_tx_counter >= SIZE0_DRAIN_BEGIN) && (r_tx_counter < SIZE0_DRAIN_END);
 
 	// DST, PTYPE set register
 	generate
@@ -104,7 +119,7 @@ module send_mii #(
 			reg	[31:0]	r_daddr;
 			reg	[31:0]	r_opts;
 			always @(posedge clk) begin
-				if (r_tx_state == WAIT && (!w_aemp || force_send)) begin
+				if (r_tx_state == WAIT && (w_start_ready || force_send)) begin
 					{r_dst_mac, r_ptype}	<=	{dst_mac, ptype};
 					{r_fport, r_dsize}		<=	{fport, dsize};
 					{r_daddr}				<=	{daddr};
@@ -159,7 +174,7 @@ module send_mii #(
 			assign	mii_tx_d	=	r_txd_mii;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA) && w_payload_active && !r_toggle && !w_emp;
+			assign	w_dout_en	=	(r_tx_state == FDATA) && (w_payload_active || w_size0_drain_active) && !r_toggle && !w_emp;
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
 
@@ -182,7 +197,7 @@ module send_mii #(
 						r_txd_mii			<=	4'h0;
 
 						// (recv flow control) or (flow state) or (exist send data)
-						if ( hw_wait | r_flow != 0 | !w_aemp | force_send ) begin
+						if ( hw_wait | r_flow != 0 | w_start_ready | force_send ) begin
 							r_tx_state	<=	PREAMBLE;
 						end
 						r_flow			<=	{r_flow[0],(hw_wait)};
@@ -542,7 +557,10 @@ module send_mii #(
 										r_txd_mii		<= 4'h0;
 									end
 								end else begin
-									r_txd_mii	<=	r_txd[7:4];
+									if (w_payload_active)
+										r_txd_mii <= w_dout[7:4];
+									else
+										r_txd_mii <= 4'h0;
 								end
 							end
 						endcase
@@ -582,11 +600,19 @@ module send_mii #(
 			end
 		end else if (MII_TYPE == "GMII") begin : GMII_CORE
 			reg		r_crc_en;
+
+			wire [13:0] w_payload_bytes;
+			wire [13:0] w_payload_end;
+			wire        w_payload_active;
+
+			assign w_payload_bytes	= (inner_dsize == 8'd0) ? 14'd4 : ({6'd0, inner_dsize} + 14'd1) << 5;
+			assign w_payload_end 	= 14'd24 + w_payload_bytes;
+			assign w_payload_active	= (r_tx_counter >= 14'd24) && (r_tx_counter <  w_payload_end);
 			
 			assign	mii_tx_d	=	r_txd;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h18);
+			assign	w_dout_en 	=	(r_tx_state == FDATA) && !w_emp && ((BUF_WIDTH == 32) ? (r_tx_counter >= 14'h18) : (w_payload_active || w_size0_drain_active));
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
 
@@ -767,9 +793,13 @@ module send_mii #(
 								{r_txc, r_txd}	<=	{1'b1, inner_option[7:0]};
 							end
 							default: begin
-								{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
+								if (w_payload_active) begin
+									{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
+								end else begin
+									{r_txc, r_txd}	<= {1'b1, 8'h00};
+								end
 								if (r_tx_counter >= 14'd63) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= ((((inner_dsize+1) << 5)+32)-1)) begin
+									if (r_flow != 0 || r_tx_counter >= (MAX_SIZE-9)  || r_tx_counter >= ((((inner_dsize+1) << 5)+32)-1)) begin
 										r_tx_state		<=	FCS;
 										r_tx_counter	<=	0;
 									end
@@ -806,12 +836,19 @@ module send_mii #(
 				end
 			end
 		end else if (MII_TYPE == "XGMII" || MII_TYPE == "25GMII") begin : XGMII_CORE
+
+			wire [13:0]	w_payload_bytes		= (inner_dsize == 0) ? 14'd4 : (({6'd0, inner_dsize} + 14'd1) << 5);
+			wire [13:0]	w_payload_end		= 14'd24 + w_payload_bytes;
+
+			wire [13:0]	w_frame_data_end	= ((r_flow != 0) || (w_payload_end < 14'd60)) ? 14'd64 : w_payload_end;
+			wire 		w_payload_active	= (r_tx_counter >= 14'd24) && (r_tx_counter <  w_payload_end);
+
 			assign	w_crc_en	=	~r_crc_init;
 
 			assign	mii_tx_d	=	r_txd;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA) && (r_tx_counter[13:3] >= 11'h3);
+			assign	w_dout_en	=	(r_tx_state == FDATA) && (r_flow == 0) && (w_payload_active || w_size0_drain_active) && !w_emp;
 			assign	w_crc_in	=	r_txd;
 
 			assign	head_end	=	(r_tx_state == FDATA) && (r_tx_counter[13:3] == 11'h3);
@@ -829,7 +866,7 @@ module send_mii #(
 						{r_txc, r_txd}	<= {8'hff, 64'h07_07_07_07_07_07_07_07};
 
 						// (recv flow control) or (flow state) or (exist send data)
-						if ( hw_wait | r_flow != 0 | !w_aemp | force_send ) begin
+						if ( hw_wait | r_flow != 0 | w_start_ready | force_send ) begin
 							r_tx_state	<=	PREAMBLE;
 						end
 						r_flow			<=	{r_flow[0],(hw_wait)};
@@ -865,23 +902,28 @@ module send_mii #(
 								end else if(r_flow != 0) begin
 									{r_txc, r_txd}	<=	{8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'h00, 8'hff, 8'hff};
 								end else begin
-									//{r_txc, r_txd}	<=	{8'h00, 8'h00, 8'h00, 8'h00, 8'h00, inner_daddr[7:0], inner_daddr[15:8], inner_daddr[23:16], inner_daddr[31:24]};
 									{r_txc, r_txd}	<=	{inner_option[7:0], inner_option[15:8], inner_option[23:16], inner_option[31:24], inner_daddr[7:0], inner_daddr[15:8], inner_daddr[23:16], inner_daddr[31:24]};
 								end
 							end
 							default: begin
-								//{r_txc, r_txd}	<= {8'h00, w_dout[7:0], w_dout[15:8], w_dout[23:16], w_dout[31:24], w_dout[39:32], w_dout[47:40], w_dout[55:48], w_dout[63:56]};
-								{r_txc, r_txd}	<= {8'h00, w_dout};
-								if (r_tx_counter >= 14'd64) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-17) || r_tx_counter >= ((((inner_dsize+1) << 5)+32)-8)) begin
-										r_tx_state	<=	FCS;
+								r_txc <= 8'h00;
+								if (w_payload_active) begin
+									if (inner_dsize == 0) begin // 4byte
+										r_txd <= {32'h0000_0000, w_dout[31:0]};
+									end else begin
+										r_txd <= w_dout;
 									end
+								end else begin
+									r_txd <= 64'h0000_0000_0000_0000;
+								end
+								
+								if ((r_tx_counter + 14'd8) >= w_frame_data_end) begin
+									r_tx_state <= FCS;
 								end 
 							end
 						endcase
 					end
 					FCS: begin
-						//{r_txc, r_txd}	<=	{8'hf0, 32'h07_07_07_fd, w_crc_data[7:0], w_crc_data[15:8], w_crc_data[23:16], w_crc_data[31:24]};
 						{r_txc, r_txd}	<=	{8'hf0, 32'h07_07_07_fd, w_crc_data[31:24], w_crc_data[23:16], w_crc_data[15:8], w_crc_data[7:0]};
 						r_tx_state	<=	WGAP;
 						r_crc_init	<=	1;

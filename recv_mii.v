@@ -17,7 +17,9 @@ module recv_mii #(
 							:	0,
 	parameter	DATA_WIDTH	=	(MII_TYPE =="25GMII") ? MII_WIDTH
 							:	(MII_TYPE == "XGMII") ? MII_WIDTH
-							:	8
+							:	8,
+
+	parameter	BUF_WIDTH	=	32
 )(
 	input					clk,
 	input					rst,
@@ -53,6 +55,16 @@ module recv_mii #(
 	output						recv_done
 );
 
+	localparam integer FIFO_WORD_BYTES		= DATA_WIDTH / 8;
+	localparam integer BUF_WORD_BYTES		= BUF_WIDTH / 8;
+
+	// padding bytes parameter for size=0 frame
+	localparam integer SIZE0_PAYLOAD_WORDS	= (4 + FIFO_WORD_BYTES - 1) / FIFO_WORD_BYTES;
+	localparam integer SIZE0_TOTAL_WORDS	= BUF_WIDTH / DATA_WIDTH;
+	localparam integer SIZE0_EXTRA_WORDS	= SIZE0_TOTAL_WORDS - SIZE0_PAYLOAD_WORDS;
+	localparam integer SIZE0_DRAIN_BEGIN	= 24 + SIZE0_PAYLOAD_WORDS * FIFO_WORD_BYTES;
+	localparam integer SIZE0_DRAIN_END		= SIZE0_DRAIN_BEGIN + SIZE0_EXTRA_WORDS * FIFO_WORD_BYTES;
+
 	// Baseline state
 	localparam	WAIT		= 0,
 				PREAMBLE	= 1,
@@ -65,7 +77,8 @@ module recv_mii #(
 				OPS			= 8,
 				FDATA		= 9,
 				WGAP		= 10,
-				FLOW_RECV	= 11;
+				FLOW_RECV	= 11,
+				FILL		= 12;
 
 	localparam	REQ		= 16'h88B5,
 				DATA	= 16'h88B6;
@@ -79,13 +92,15 @@ module recv_mii #(
 	reg		[7:0]		r_dsize;
 	reg		[31:0]		r_daddr;
 
-	reg								[31:0]		r_opts;
+	reg		[31:0]		r_opts;
 
 	reg		[13:0]		r_rx_counter;
 
 	reg					receiving;
 
 	reg		[15:0]		r_flowtime, r_flowtime_buf;
+
+	reg		[5:0]		r_fill_count;
 
 	assign	src_mac	=	r_rd_src_mac;
 	assign	dst_mac	=	r_rd_dst_mac;
@@ -95,7 +110,11 @@ module recv_mii #(
 	assign	dsize	=	r_dsize;
 	assign	daddr	=	r_daddr;
 	assign	opts	=	r_opts;
-	reg	[1:0]	recv_done_reg;
+	reg		[1:0]		recv_done_reg;
+
+	wire w_deny_frame	=	(read_deny_type1 == r_ptype) ||
+							(read_deny_type2 == r_ptype) ||
+							(read_deny_type3 == r_ptype);
 
 	// Frame receive done signal
 	always @(posedge clk) begin
@@ -110,24 +129,24 @@ module recv_mii #(
 	generate
 		if (MII_TYPE == "MII") begin : MII_CORE
 			reg				toggle;
-			(* mark_debug = "true" *)reg				rx_valid;
-			(* mark_debug = "true" *)reg	[7:0]		r_rxd;
+			reg				rx_valid;
+			reg	[7:0]		r_rxd;
 
 			wire [14:0] w_payload_bytes = (r_dsize == 0) ? 15'd4
 										: (({7'd0, r_dsize} + 15'd1) << 5);
 			wire [14:0] w_payload_nibbles = w_payload_bytes << 1;
-			wire w_deny_frame	=	(read_deny_type1 == r_ptype) ||
-									(read_deny_type2 == r_ptype) ||
-									(read_deny_type3 == r_ptype);
 			wire w_payload_byte_complete = (r_rx_state == FDATA) && mii_rx_c && toggle && !w_deny_frame && ({1'b0, r_rx_counter} < w_payload_nibbles);
 
-			assign	buf_wen		=	w_payload_byte_complete;
-			assign	buf_d		=	{mii_rx_d, r_rxd[3:0]};
+			wire 	w_fill_active 	= (r_rx_state == FILL) && (r_fill_count < SIZE0_EXTRA_WORDS);
+
+			assign	buf_wen		=	w_payload_byte_complete || w_fill_active;
+			assign	buf_d		=	w_fill_active ? 8'h00 : {mii_rx_d, r_rxd[3:0]};
 			assign	head_end	=	r_rx_state == OPS && r_rx_counter == 8-1;
 
 			always @(posedge clk) begin
 				if (rst) begin
 					toggle			<=	0;
+					r_fill_count	<=	0;
 					r_rx_counter	<=	0;
 					r_rx_state		<=	WAIT;
 					
@@ -268,11 +287,21 @@ module recv_mii #(
 									r_rxd[7:4] <= mii_rx_d;
 								end
 
-								if (toggle && ({1'b0, r_rx_counter} == (w_payload_nibbles-1'b1))) begin
+								if (toggle && ({1'b0, r_rx_counter} == (w_payload_nibbles-1))) begin
 									r_rx_state <= WGAP;
 									r_rx_counter <= 0;
 								end else begin
 									r_rx_counter <= r_rx_counter + 1'b1;
+								end
+								if (toggle && (r_rx_counter == (w_payload_nibbles-1))) begin
+									r_rx_counter	<= 14'd0;
+									r_fill_count	<= 6'd0;
+
+									if ((r_dsize == 8'd0) && (SIZE0_EXTRA_WORDS != 0)) begin
+										r_rx_state <= FILL;
+									end else begin
+										r_rx_state <= WGAP;
+									end
 								end
 							end
 						end
@@ -316,6 +345,14 @@ module recv_mii #(
 								default: r_rx_state		<=	FLOW_RECV;
 							endcase
 						end
+						FILL: begin
+							if ((SIZE0_EXTRA_WORDS <= 1) || (r_fill_count >= SIZE0_EXTRA_WORDS-1)) begin
+								r_fill_count <= 6'd0;
+								r_rx_state   <= WGAP;
+							end else begin
+								r_fill_count <= r_fill_count+1'b1;
+							end
+						end
 						WGAP: begin
 							if (receiving) begin
 								if (!mii_rx_c) begin
@@ -351,15 +388,18 @@ module recv_mii #(
 
 			assign	hw_wait	= (r_flowtime != 0);
 		end else if (MII_TYPE == "GMII") begin : GMII_CORE
-			(* mark_debug = "true" *)reg				rx_valid;
-			(* mark_debug = "true" *)reg	[7:0]		r_rxd;	
+			reg				rx_valid;
+			reg	[7:0]		r_rxd;
 
-			assign	buf_wen	=	rx_valid;
-			assign	buf_d	=	r_rxd;
+			wire 	w_fill_active 	= (r_rx_state == FILL) && (r_fill_count < SIZE0_EXTRA_WORDS);
+
+			assign	buf_wen	=	rx_valid || w_fill_active;
+			assign	buf_d	=	w_fill_active ? 8'h00 : r_rxd;
 			assign	head_end	=	r_rx_state == OPS && r_rx_counter == 4-1;
 
 			always @(posedge clk) begin
 				if (rst) begin
+					r_fill_count	<=	0;
 					r_rx_counter	<=	0;
 					r_rx_state		<=	WAIT;
 					
@@ -483,14 +523,25 @@ module recv_mii #(
 							end
 						end
 						FDATA: begin
-							r_rx_counter	<=	r_rx_counter + 1;
-							rx_valid		<=	1'b1;
-							r_rxd			<=	mii_rx_d;
-							if (mii_rx_d == 0 && mii_rx_c == 0 ||
-								(r_dsize == 0 ? r_rx_counter >= 4 : r_rx_counter >= ((r_dsize+1) << 5)) ||
-								(read_deny_type1 == ptype || read_deny_type2 == ptype || read_deny_type3 == ptype)) begin
-								r_rx_state		<=	WGAP;
-								rx_valid		<=	1'b0;
+							if (((mii_rx_d == 8'h00) && !mii_rx_c) || w_deny_frame) begin
+								rx_valid		<= 1'b0;
+								r_rx_counter	<= 14'd0;
+								r_fill_count	<= 6'd0;
+								r_rx_state		<= WGAP;
+							end	else if (((r_dsize == 8'd0) && (r_rx_counter >= 14'd4)) || ((r_dsize != 8'd0) && (r_rx_counter >= (({6'd0, r_dsize} + 14'd1) << 5)))) begin
+								rx_valid		<= 1'b0;
+								r_rx_counter	<= 14'd0;
+								r_fill_count	<= 6'd0;
+
+								if ((r_dsize == 8'd0) && (SIZE0_EXTRA_WORDS != 0)) begin
+									r_rx_state		<= FILL;
+								end else begin
+									r_rx_state		<= WGAP;
+								end
+							end else begin
+								r_rxd			<= mii_rx_d;
+								rx_valid		<= 1'b1;
+								r_rx_counter	<= r_rx_counter + 1'b1;
 							end
 						end
 						FLOW_RECV: begin
@@ -521,6 +572,16 @@ module recv_mii #(
 								end
 								default: r_rx_state		<=	FLOW_RECV;
 							endcase
+						end
+						FILL: begin
+							rx_valid	<= 1'b0;
+
+							if ((SIZE0_EXTRA_WORDS <= 1) || (r_fill_count >= SIZE0_EXTRA_WORDS-1)) begin
+								r_fill_count	<= 6'd0;
+								r_rx_state		<= WGAP;
+							end else begin
+								r_fill_count	<= r_fill_count + 1'b1;
+							end
 						end
 						WGAP: begin
 							rx_valid		<=	1'b0;
@@ -561,11 +622,15 @@ module recv_mii #(
 			wire	[63:0]	xgmii_rxd;
 			wire	[7:0]	xgmii_rxc;
 
-			(* mark_debug = "true" *)reg				rx_valid;
-			(* mark_debug = "true" *)reg	[63:0]		rx_data;	
+			wire	[13:0]	w_payload_bytes = (r_dsize == 0) ? 14'd4 : (({6'd0, r_dsize} + 14'd1) << 5);
 
-			assign	buf_wen	=	rx_valid;
-			assign	buf_d	=	rx_data;
+			wire	w_fill_active = (r_rx_state == FILL) && (r_fill_count < SIZE0_EXTRA_WORDS);
+
+			reg				rx_valid;
+			reg		[63:0]	rx_data;	
+
+			assign	buf_wen	=	rx_valid || w_fill_active;
+			assign	buf_d	=	w_fill_active ? 64'h0 : rx_data;
 			assign	head_end	=	r_rx_state == FDATA && r_rx_counter == 0;
 
 			xgmiisync xgmiisync_0 (
@@ -579,6 +644,7 @@ module recv_mii #(
 
 			always @(posedge clk) begin
 				if (rst) begin
+					r_fill_count	<=	0;
 					r_rx_counter	<=	0;
 					r_rx_state		<=	WAIT;
 					
@@ -656,21 +722,38 @@ module recv_mii #(
 							end
 						end
 						FDATA: begin
-							if ((r_dsize == 0 ? r_rx_counter >= 8 : r_rx_counter >= ((r_dsize+1) << 5)) 
-								|| (read_deny_type1 == ptype || read_deny_type2 == ptype || read_deny_type3 == ptype)) begin
-								rx_valid		<=	1'b0;
-								rx_data			<=	64'h0;
-								r_rx_counter	<=	0;
-								r_rx_state		<=	WGAP;
-								receiving		<=	0;
-							end else begin
-								if (r_dsize == 0) begin
-									rx_data		<=	{32'h0, xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24]};
+							if (w_deny_frame) begin
+								rx_valid		<= 1'b0;
+								rx_data			<= 64'h0;
+								r_rx_counter	<= 14'd0;
+								r_fill_count	<= 6'd0;
+								r_rx_state		<= WGAP;
+
+								receiving      <= 1'b1;
+							end else if (r_rx_counter >= w_payload_bytes) begin
+								rx_valid		<= 1'b0;
+								rx_data			<= 64'h0;
+								r_rx_counter	<= 14'd0;
+								r_fill_count	<= 6'd0;
+
+								if ((r_dsize == 8'd0) && (SIZE0_EXTRA_WORDS != 0)) begin
+									r_rx_state		<= FILL;
+									receiving		<= 1'b1;
 								end else begin
-									rx_data		<=	{xgmii_rxd[7:0], xgmii_rxd[15:8], xgmii_rxd[23:16], xgmii_rxd[31:24], xgmii_rxd[39:32], xgmii_rxd[47:40], xgmii_rxd[55:48], xgmii_rxd[63:56]};
+									r_rx_state		<= WGAP;
+									receiving		<= 1'b0;
 								end
-								r_rx_counter	<=	r_rx_counter + 8;
-								rx_valid	<=	1'b1;
+							end else if (xgmii_rxc != 8'h00) begin
+								// A control character before the declared payload end.
+								rx_valid		<= 1'b0;
+								rx_data			<= 64'h0;
+								r_rx_counter	<= 14'd0;
+								r_rx_state		<= WGAP;
+								receiving		<= 1'b0;
+							end else begin
+								rx_valid		<= 1'b1;
+								rx_data			<= xgmii_rxd;
+								r_rx_counter	<= r_rx_counter + 14'd8;
 							end
 						end
 						FLOW_RECV: begin
@@ -681,21 +764,31 @@ module recv_mii #(
 							end
 							r_rx_counter	<=	r_rx_counter + 1;
 						end
+						FILL: begin
+							rx_valid <= 1'b0;
+
+							if ((SIZE0_EXTRA_WORDS <= 1) || (r_fill_count >= SIZE0_EXTRA_WORDS-1)) begin
+								r_fill_count	<= 6'd0;
+								r_rx_state		<= WGAP;
+							end else begin
+								r_fill_count	<= r_fill_count+1'b1;
+							end
+						end
 						WGAP: begin
 							rx_valid		<=	1'b0;
 							rx_data			<=	64'h0;
 							if (receiving) begin
 								if (xgmii_rxc == 8'hFF) begin
-									receiving		<=	0;
-									r_rx_counter	<=	0;
+									receiving		<=	1'b0;
+									r_rx_counter	<=	14'd0;
 								end
 							end else begin
 								r_rx_state		<=	WAIT;
 							end
 						end
 						default: begin
-							receiving		<=	0;
-							r_rx_counter	<=	0;
+							receiving		<=	1'b0;
+							r_rx_counter	<=	14'd0;
 							r_rx_state		<=	WAIT;
 						end
 					endcase

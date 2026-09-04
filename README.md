@@ -84,3 +84,5 @@ Re-define REQUEST, DATA Frame type.
 2026/9/4  
 Fixed send data arrangement of MII mode.  
 
+2026/9/5  
+Fixed XGMII Mode sequence and little refactoring.  
