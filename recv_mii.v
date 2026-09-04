@@ -113,8 +113,16 @@ module recv_mii #(
 			(* mark_debug = "true" *)reg				rx_valid;
 			(* mark_debug = "true" *)reg	[7:0]		r_rxd;
 
-			assign	buf_wen	=	rx_valid;
-			assign	buf_d	=	r_rxd;
+			wire [14:0] w_payload_bytes = (r_dsize == 0) ? 15'd4
+										: (({7'd0, r_dsize} + 15'd1) << 5);
+			wire [14:0] w_payload_nibbles = w_payload_bytes << 1;
+			wire w_deny_frame	=	(read_deny_type1 == r_ptype) ||
+									(read_deny_type2 == r_ptype) ||
+									(read_deny_type3 == r_ptype);
+			wire w_payload_byte_complete = (r_rx_state == FDATA) && mii_rx_c && toggle && !w_deny_frame && ({1'b0, r_rx_counter} < w_payload_nibbles);
+
+			assign	buf_wen		=	w_payload_byte_complete;
+			assign	buf_d		=	{mii_rx_d, r_rxd[3:0]};
 			assign	head_end	=	r_rx_state == OPS && r_rx_counter == 8-1;
 
 			always @(posedge clk) begin
@@ -154,8 +162,6 @@ module recv_mii #(
 								r_dsize			<=	0;
 								r_daddr			<=	0;
 								r_opts			<=	0;
-
-								rx_valid		<=	1'b0;
 
 								r_rxd			<=	0;
 							end
@@ -233,7 +239,7 @@ module recv_mii #(
 							if (r_rx_counter <= 8) begin
 								r_daddr[(8*(3-r_rx_counter[3:1])+4*toggle)+:4]	<=	mii_rx_d;
 							end
-							if(r_rx_counter >= 8-1) begin
+							if (r_rx_counter >= 8-1) begin
 								r_rx_counter	<=	0;
 								r_rx_state		<=	OPS;
 							end else begin
@@ -252,19 +258,22 @@ module recv_mii #(
 							end
 						end
 						FDATA: begin
-							r_rx_counter	<=	r_rx_counter + 1;
-
-							if (toggle) begin
-								r_rxd[7:4]		<=	mii_rx_d;
-								rx_valid	<=	1'b1;
+							if (!mii_rx_c || w_deny_frame) begin
+								r_rx_state <= WGAP;
+								r_rx_counter <= 0;
 							end else begin
-								r_rxd[3:0]		<=	mii_rx_d;
-								rx_valid	<=	1'b0;
-							end
+								if (!toggle) begin
+									r_rxd[3:0] <= mii_rx_d;
+								end else begin
+									r_rxd[7:4] <= mii_rx_d;
+								end
 
-							if (!mii_rx_c || (r_dsize == 0 ? r_rx_counter >= 4*2 : r_rx_counter >= ((r_dsize+1) << 5)*2) || (read_deny_type1 == r_ptype || read_deny_type2 == r_ptype || read_deny_type3 == r_ptype)) begin
-								r_rx_state		<=	WGAP;
-								rx_valid		<=	1'b0;
+								if (toggle && ({1'b0, r_rx_counter} == (w_payload_nibbles-1'b1))) begin
+									r_rx_state <= WGAP;
+									r_rx_counter <= 0;
+								end else begin
+									r_rx_counter <= r_rx_counter + 1'b1;
+								end
 							end
 						end
 						FLOW_RECV: begin
@@ -308,7 +317,6 @@ module recv_mii #(
 							endcase
 						end
 						WGAP: begin
-							rx_valid		<=	1'b0;
 							if (receiving) begin
 								if (!mii_rx_c) begin
 									receiving		<=	0;

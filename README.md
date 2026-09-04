@@ -81,6 +81,6 @@ Fixed the definition of data size.
 Fixed droping undefined type frame.  
 Re-define REQUEST, DATA Frame type.  
 
-2026/9/3  
+2026/9/4  
 Fixed send data arrangement of MII mode.  
 

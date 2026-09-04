@@ -144,15 +144,22 @@ module send_mii #(
 		if (MII_TYPE == "MII") begin : MII_CORE
 			reg		r_crc_en;
 			reg		r_toggle;
+			reg		r_end_reserve;
 
 			reg		[3:0]	r_txd_mii;
-
-			wire	w_stop_ren = (r_tx_counter == 14'h0) || (r_tx_counter >= (((inner_dsize+1) << 5)+32));
 			
+			wire [13:0] w_payload_bytes =	(inner_dsize == 0)
+										?	14'd4
+										:	(({6'd0, inner_dsize} + 14'd1) << 5);
+
+			wire [13:0] w_payload_end	=	14'd24 + w_payload_bytes;  // exclusive end
+
+			wire	w_payload_active	=	(r_tx_counter >= 14'd24) &&	(r_tx_counter < w_payload_end);
+
 			assign	mii_tx_d	=	r_txd_mii;
 			assign	mii_tx_c	=	r_txc;
 
-			assign	w_dout_en	=	(r_tx_state == FDATA && r_tx_counter >= 14'h18 && !w_stop_ren) && !r_toggle;
+			assign	w_dout_en	=	(r_tx_state == FDATA) && w_payload_active && !r_toggle && !w_emp;
 			assign	w_crc_in	=	r_txd;
 			assign	w_crc_en	=	r_crc_en;
 
@@ -199,15 +206,27 @@ module send_mii #(
 					end
 					FDATA: begin
 						if (r_toggle == 0) begin
-							if (r_tx_counter >= 14'd63 && (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= ((((inner_dsize+1) << 5)+32)))) begin
-								r_tx_counter	<=	0;
-								r_crc_en		<=	0;
-							end else begin
-								r_crc_en		<=	0;
-							end
+							// Lower nibble is being transmitted.
+							r_crc_en <= 1'b0;
+
+							r_end_reserve <=
+								(r_tx_counter >= 14'd63) &&
+								(
+									(r_flow != 0) ||
+									//w_aemp ||
+									(r_tx_counter >= (MAX_SIZE-9)) ||
+									(r_tx_counter >= (w_payload_end-1))
+								);
 						end else begin
-							r_crc_en		<=	1;
-							r_tx_counter	<=	r_tx_counter + 1;
+							// Upper nibble is being transmitted.
+							r_crc_en <= 1'b1;
+
+							if (r_end_reserve) begin
+								r_tx_counter <= 14'd0;
+								r_tx_state   <= FCS;
+							end else begin
+								r_tx_counter <= r_tx_counter + 1'b1;
+							end
 						end
 						r_toggle	<=	~r_toggle;
 
@@ -514,16 +533,17 @@ module send_mii #(
 							end
 							default: begin
 								if (r_toggle == 0) begin
-									{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
-									r_txd_mii	<=	w_dout[3:0];
+									if (w_payload_active) begin
+										{r_txc, r_txd}	<= {1'b1, w_dout[7:0]};
+										r_txd_mii		<= w_dout[3:0];
+									end else begin
+										// Ethernet minimum-frame padding
+										{r_txc, r_txd}	<= {1'b1, 8'h00};
+										r_txd_mii		<= 4'h0;
+									end
 								end else begin
 									r_txd_mii	<=	r_txd[7:4];
 								end
-								if (r_tx_counter >= 14'd63 && r_toggle == 0) begin
-									if (r_flow != 0 || w_aemp || r_tx_counter >= (MAX_SIZE-9) || r_tx_counter >= ((((inner_dsize+1) << 5)+32))) begin
-										r_tx_state		<=	FCS;
-									end
-								end 
 							end
 						endcase
 					end
